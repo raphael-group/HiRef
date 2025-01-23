@@ -51,16 +51,16 @@ def hierarchical_refinement(C, rank_schedule, solver, \
             
             # Solve a low-rank OT sub-problem with black-box solver
             Q, R, diagG, errs = solver(C_XY,
-                                       gamma=100,
+                                       gamma=30,
                                        r = rank_level,
-                                       max_iter=100,
+                                       max_iter=120,
                                        device=device,
-                                       min_iter = 25,
+                                       min_iter = 40,
                                        max_inneriters_balanced=100,
                                        max_inneriters_relaxed=100,
                                        diagonalize_return=True,
-                                       printCost=True, tau_in=100000)
-            print(torch.diag(diagG))
+                                       printCost=False, tau_in=100000)
+            #print(torch.diag(diagG))
             
             if plot_clusterings:
                 plt.imshow(Q.cpu().numpy())
@@ -137,11 +137,11 @@ def HROT_worker_subproblem(args):
     try:
         # Solve a low-rank OT sub-problem with black-box solver
         Q, R, diagG, errs = FRLC_opt(C_XY,
-                                   gamma=200,
+                                   gamma=30,
                                    r = rank_level,
-                                   max_iter= 100,
+                                   max_iter= 120,
                                    device=device,
-                                   min_iter = 25, 
+                                   min_iter = 40, 
                                    max_inneriters_balanced=100, 
                                    max_inneriters_relaxed=100,
                                    diagonalize_return=True,
@@ -211,6 +211,10 @@ def hierarchical_refinement_parallelized(C, rank_schedule, solver, base_rank=1, 
                             clustering_type='soft', plot_clusterings=False, return_as_coupling=False, \
                                          num_processes=None):
     '''
+    A wrapper for solving HR-OT using node parallelization (cpu)
+    
+    Parameters
+    ----------
     X: (n,d) torch.tensor
         First dataset of n points in R^d
     Y: (n,d) torch.tensor
@@ -229,6 +233,18 @@ def hierarchical_refinement_parallelized(C, rank_schedule, solver, base_rank=1, 
         Otherwise, takes arg-max.
     plot_clusterings: bool
         If true, plots a heatmap of the Q and R clusterings.
+    return_as_coupling: bool
+        If true, returns a coupling matrix. Else, returns a sparse list of points with their Monge mapping.
+    num_processes: int
+        The number of nodes (CPUs) on which to run.
+    
+     Returns
+    -------
+    gamma : torch.tensor of shape (N, N)
+        Optimal transport plan.
+    (OR)
+    F_t : list (size N)
+        List of (x, T(x)) tuples
     '''
     
     # Assuming strictly CPU Parallelization (todo: extend to gpu)
