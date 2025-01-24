@@ -90,8 +90,8 @@ class HierarchicalRefinementOT:
         
         obj = cls.__new__(cls)
         
-        obj.X = X,
-        obj.Y = Y,
+        obj.X = X
+        obj.Y = Y
         obj.rank_schedule = rank_schedule
         
         if distance_rank_schedule is None:
@@ -225,11 +225,7 @@ class HierarchicalRefinementOT:
         """
         Solve problem for low-rank coupling under a low-rank factorization of distance matrix.
         """
-        print(idxX)
-        print(idxY)
         _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
-        print(self.X.shape)
-        print(_x0.shape)
         C1, C2 = util.low_rank_distance_factorization(_x0,
                                                       _x1,
                                                       r=rankD,
@@ -239,8 +235,10 @@ class HierarchicalRefinementOT:
         c = ( C1.max()**1/2 ) * ( C2.max()**1/2 )
         C1, C2 = C1/c, C2/c
         C_factors = (C1, C2)
-        A_factors = (torch.zeros(C1.shape[0], rankD), torch.zeros(C1.shape[0], rankD))
-        B_factors = (torch.zeros(C2.shape[0], rankD), torch.zeros(C2.shape[0], rankD))
+        
+        A_factors = None
+        B_factors = None
+        
         # Solve a low-rank OT sub-problem with black-box solver
         Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
                                    gamma=30,
@@ -294,8 +292,8 @@ class HierarchicalRefinementOT:
             if self.C is not None:
                 cost += self.C[idx1, idx2]
             else:
-                # Note: only for Wasserstein-2 case
-                cost += (1/2)*torch.norm(self.X[idx1,:] - self.Y[idx2,:])**2
+                # Note: LR-factorization for Euclidean dist
+                cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])
         cost = cost / self.N
         return cost
                 

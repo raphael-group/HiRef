@@ -178,29 +178,31 @@ def compute_grad_A_LR(C_factors, A_factors, B_factors, Q, R, Lambda, gamma, devi
     one_r = torch.ones((r), device=device, dtype=dtype)
     One_rr = torch.outer(one_r, one_r).to(device)
     N1, N2 = C_factors[0].size(0), C_factors[1].size(1)
-
-    A1, A2 = A_factors[0], A_factors[1]
-    B1, B2 = B_factors[0], B_factors[1]
     
-    # A*2's low-rank factorization
-    A1_tild, A2_tild = util.hadamard_square_lr(A1, A2.T, device=device)
-    
-    # GW gradients for balanced marginal cases
-    gradQ = - 4 * (A1 @ (A2 @ (Q @ Lambda@( (R.T@ B1) @ (B2 @R) )@Lambda.T)) )
-    gradR = - 4 * (B1 @ (B2 @ (R @ (Lambda.T@( (Q.T @ A1) @ ( A2 @ Q ))@Lambda)) ) )
-
-    one_N1, one_N2 = torch.ones((N1), device=device, dtype=dtype), torch.ones((N2), device=device, dtype=dtype)
-    if full_grad:
-        # Rank-1 GW perturbation
-        N1, N2 = Q.shape[0], R.shape[0]
-        gQ, gR = Q.T @ one_N1, R.T @ one_N2
+    if A_factors is not None and B_factors is not None:
+        A1, A2 = A_factors[0], A_factors[1]
+        B1, B2 = B_factors[0], B_factors[1]
         
-        MR = Lambda.T @ ( (Q.T @ A1) @ (A2 @ Q) ) @ Lambda @ ((R.T @ B1) @ (B2 @ R)) @ torch.diag(1/gR)
-        MQ = Lambda @ ( (R.T @ B1) @ (B2 @ R) ) @ Lambda.T @ ((Q.T @ A1) @ (A2 @ Q) ) @ torch.diag(1/gQ)
-        gradQ += 4*torch.outer(one_N1, torch.diag(MQ))
-        gradR += 4*torch.outer(one_N2, torch.diag(MR))
+        # A*2's low-rank factorization
+        A1_tild, A2_tild = util.hadamard_square_lr(A1, A2.T, device=device)
+        
+        # GW gradients for balanced marginal cases
+        gradQ = - 4 * (A1 @ (A2 @ (Q @ Lambda@( (R.T@ B1) @ (B2 @R) )@Lambda.T)) )
+        gradR = - 4 * (B1 @ (B2 @ (R @ (Lambda.T@( (Q.T @ A1) @ ( A2 @ Q ))@Lambda)) ) )
     
-    gQ, gR = Q.T @ one_N1, R.T @ one_N2
+        one_N1, one_N2 = torch.ones((N1), device=device, dtype=dtype), torch.ones((N2), device=device, dtype=dtype)
+        if full_grad:
+            # Rank-1 GW perturbation
+            N1, N2 = Q.shape[0], R.shape[0]
+            gQ, gR = Q.T @ one_N1, R.T @ one_N2
+            
+            MR = Lambda.T @ ( (Q.T @ A1) @ (A2 @ Q) ) @ Lambda @ ((R.T @ B1) @ (B2 @ R)) @ torch.diag(1/gR)
+            MQ = Lambda @ ( (R.T @ B1) @ (B2 @ R) ) @ Lambda.T @ ((Q.T @ A1) @ (A2 @ Q) ) @ torch.diag(1/gQ)
+            gradQ += 4*torch.outer(one_N1, torch.diag(MQ))
+            gradR += 4*torch.outer(one_N2, torch.diag(MR))
+    else:
+        gradQ = 0
+        gradR = 0
     
     # total gradients -- readjust cost for FGW problem by adding W gradients
     gradQW, gradRW = Wasserstein_Grad_LR(C_factors, Q, R, Lambda, device, \
@@ -217,13 +219,15 @@ def compute_grad_B_LR(C_factors, A_factors, B_factors, Q, R, Lambda, gQ, gR, gam
                    alpha=0.0, dtype=torch.float64):
     
     N1, N2 = C_factors[0].size(0), C_factors[1].size(1)
-    
-    A1, A2 = A_factors[0], A_factors[1]
-    B1, B2 = B_factors[0], B_factors[1]
-    # GW grad
-    gradLambda = -4 * ( (Q.T @ A1) @ (A2 @ Q) ) @ Lambda @ ( (R.T @ B1) @ (B2 @ R) )
-    
-    del A1,A2,B1,B2
+
+    if A_factors is not None and B_factors is not None:
+        A1, A2 = A_factors[0], A_factors[1]
+        B1, B2 = B_factors[0], B_factors[1]
+        # GW grad
+        gradLambda = -4 * ( (Q.T @ A1) @ (A2 @ Q) ) @ Lambda @ ( (R.T @ B1) @ (B2 @ R) )
+        del A1,A2,B1,B2
+    else:
+        gradLambda = 0
     
     C1, C2 = C_factors[0], C_factors[1]
     # total grad

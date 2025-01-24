@@ -422,8 +422,8 @@ def low_rank_distance_factorization(X1, X2, r, eps, device='cpu', dtype=torch.fl
     # low-rank distance matrix factorization of Bauscke, Indyk, Woodruff
     
     t = int(r/eps) # this is poly(1/eps, r) in general -- this t might not achieve the correct bound tightly
-    i_star = random.randint(1, n)
-    j_star = random.randint(1, m)
+    i_star = random.randint(0, n-1)
+    j_star = random.randint(0, m-1)
     
     # Define probabilities of sampling
     p = (torch.cdist(X1, X2[j_star][None,:])**2 \
