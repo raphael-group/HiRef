@@ -221,26 +221,39 @@ class HierarchicalRefinementOT:
         
         raise NotImplementedError
 
-    def _solve_LR_prob(self, idxX, idxY, rank_level, rankD, eps=0.02):
+    def _solve_LR_prob(self, idxX, idxY, rank_level, rankD, eps=0.04):
         """
         Solve problem for low-rank coupling under a low-rank factorization of distance matrix.
         """
         _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
-        C1, C2 = util.low_rank_distance_factorization(_x0,
-                                                      _x1,
-                                                      r=rankD,
-                                                      eps=eps,
-                                                      device=self.device)
-        # Normalize appropriately
-        c = ( C1.max()**1/2 ) * ( C2.max()**1/2 )
-        C1, C2 = C1/c, C2/c
-        C_factors = (C1, C2)
-        
-        A_factors = None
-        B_factors = None
-        
-        # Solve a low-rank OT sub-problem with black-box solver
-        Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
+
+        if rankD < _x0.shape[0]:
+            C1, C2 = util.low_rank_distance_factorization(_x0,
+                                                          _x1,
+                                                          r=rankD,
+                                                          eps=eps,
+                                                          device=self.device)
+            # Normalize appropriately
+            c = ( C1.max()**1/2 ) * ( C2.max()**1/2 )
+            C1, C2 = C1/c, C2/c
+            C_factors = (C1, C2)
+            A_factors = None
+            B_factors = None
+            # Solve a low-rank OT sub-problem with black-box solver
+            Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
+                                       gamma=30,
+                                       r = rank_level,
+                                       max_iter=120,
+                                       device=self.device,
+                                       min_iter = 40,
+                                       max_inneriters_balanced=100,
+                                       max_inneriters_relaxed=100,
+                                       diagonalize_return=True,
+                                       printCost=False, tau_in=100000,
+                                           dtype = C1.dtype)
+        else:
+            C_XY = torch.cdist(_x0, _x1)
+            Q, R, diagG, errs = FRLC_opt(C_XY,
                                    gamma=30,
                                    r = rank_level,
                                    max_iter=120,
@@ -250,7 +263,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_relaxed=100,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000,
-                                       dtype = C1.dtype)
+                                       dtype = C_XY.dtype)
         return Q, R
         
     def _solve_prob(self, idxX, idxY, rank_level):
