@@ -51,7 +51,7 @@ def compute_grad_A(C, Q, R, Lambda, gamma, \
     
     if Wasserstein:
         gradQ, gradR = Wasserstein_Grad(C, Q, R, Lambda, device, \
-                   dtype=torch.float64, full_grad=full_grad)
+                   dtype=dtype, full_grad=full_grad)
         
     elif A is not None and B is not None:
         if not semiRelaxedLeft and not semiRelaxedRight and not unbalanced:
@@ -84,7 +84,7 @@ def compute_grad_A(C, Q, R, Lambda, gamma, \
         # Readjust cost for FGW problem
         if FGW:
             gradQW, gradRW = Wasserstein_Grad(C, Q, R, Lambda, device, \
-                   dtype=torch.float64, full_grad=full_grad)
+                   dtype=dtype, full_grad=full_grad)
             gradQ = (1-alpha)*gradQW + alpha*gradQ
             gradR = (1-alpha)*gradRW + alpha*gradR
     else:

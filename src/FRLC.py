@@ -159,7 +159,7 @@ def FRLC_opt(C, a=None, b=None, A=None, B=None, tau_in = 50, tau_out=50, \
         gradQ, gradR, gamma_k = gd.compute_grad_A(C, Q, R, Lambda, gamma, semiRelaxedLeft, \
                                                semiRelaxedRight, device, Wasserstein=Wasserstein, \
                                                A=A, B=B, FGW=FGW, alpha=alpha, \
-                                                  unbalanced=unbalanced, full_grad=full_grad)
+                                                  unbalanced=unbalanced, full_grad=full_grad, dtype=dtype)
         if semiRelaxedLeft:
             
             R = util.logSinkhorn(gradR - (gamma_k**-1)*torch.log(R), b, gR, gamma_k, max_iter = max_inneriters_relaxed, \
@@ -170,7 +170,7 @@ def FRLC_opt(C, a=None, b=None, A=None, B=None, tau_in = 50, tau_out=50, \
             gQ, gR = Q.T @ one_N1, R.T @ one_N2
             gradT, gamma_T = gd.compute_grad_B(C, Q, R, Lambda, gQ, gR, \
                                                gamma, device, Wasserstein=Wasserstein, \
-                                               A=A, B=B, FGW=FGW, alpha=alpha)
+                                               A=A, B=B, FGW=FGW, alpha=alpha, dtype=dtype)
             
         elif semiRelaxedRight:
             
@@ -182,7 +182,7 @@ def FRLC_opt(C, a=None, b=None, A=None, B=None, tau_in = 50, tau_out=50, \
             gQ, gR = Q.T @ one_N1, R.T @ one_N2
             gradT, gamma_T = gd.compute_grad_B(C, Q, R, Lambda, gQ, gR, \
                                                gamma, device, Wasserstein=Wasserstein, \
-                                               A=A, B=B, FGW=FGW, alpha=alpha)
+                                               A=A, B=B, FGW=FGW, alpha=alpha, dtype=dtype)
             
         elif unbalanced:
             
@@ -195,7 +195,7 @@ def FRLC_opt(C, a=None, b=None, A=None, B=None, tau_in = 50, tau_out=50, \
             
             gradT, gamma_T = gd.compute_grad_B(C, Q, R, Lambda, gQ, gR, gamma, \
                                                device, Wasserstein=Wasserstein, \
-                                               A=A, B=B, FGW=FGW, alpha=alpha)
+                                               A=A, B=B, FGW=FGW, alpha=alpha, dtype=dtype)
             
         else:
             
@@ -208,7 +208,7 @@ def FRLC_opt(C, a=None, b=None, A=None, B=None, tau_in = 50, tau_out=50, \
             gQ, gR = Q.T @ one_N1, R.T @ one_N2
             gradT, gamma_T = gd.compute_grad_B(C, Q, R, Lambda, gQ, gR, gamma, \
                                                device, Wasserstein=Wasserstein, \
-                                               A=A, B=B, FGW=FGW, alpha=alpha)
+                                               A=A, B=B, FGW=FGW, alpha=alpha, dtype=dtype)
         
         T = util.logSinkhorn(gradT - (gamma_T**-1)*torch.log(T), gQ, gR, gamma_T, max_iter = max_inneriters_balanced, \
                          device=device, dtype=dtype, balanced=True, unbalanced=False)

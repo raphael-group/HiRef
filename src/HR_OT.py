@@ -249,7 +249,8 @@ class HierarchicalRefinementOT:
                                    max_inneriters_balanced=100,
                                    max_inneriters_relaxed=100,
                                    diagonalize_return=True,
-                                   printCost=False, tau_in=100000)
+                                   printCost=False, tau_in=100000,
+                                       dtype = C1.dtype)
         return Q, R
         
     def _solve_prob(self, idxX, idxY, rank_level):
@@ -271,7 +272,8 @@ class HierarchicalRefinementOT:
                                    max_inneriters_balanced=100,
                                    max_inneriters_relaxed=100,
                                    diagonalize_return=True,
-                                   printCost=False, tau_in=100000)
+                                   printCost=False, tau_in=100000,
+                                       dtype = C_XY.dtype)
         return Q, R
 
     def _compute_coupling_from_Ft(self):
