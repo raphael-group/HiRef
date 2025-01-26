@@ -3,6 +3,7 @@ import torch
 import util
 import objective_grad as gd
 import matplotlib.pyplot as plt
+import time
 
 
 
@@ -409,9 +410,10 @@ def FRLC_LR_opt(C_factors, A_factors, B_factors, a=None, b=None, tau_in = 50, ta
         
         if k % 25 == 0:
             print(f'Iteration: {k}')
-        
+
         gradQ, gradR, gamma_k = gd.compute_grad_A_LR(C_factors, A_factors, B_factors, Q, R, Lambda, gamma, device, \
                                    alpha=alpha, dtype=dtype, full_grad=full_grad)
+        
         ### Semi-relaxed updates ###
         R = util.logSinkhorn(gradR - (gamma_k**-1)*torch.log(R), b, gR, gamma_k, max_iter = max_inneriters_relaxed, \
                          device=device, dtype=dtype, balanced=False, unbalanced=False, tau=tau_in)
@@ -423,6 +425,7 @@ def FRLC_LR_opt(C_factors, A_factors, B_factors, a=None, b=None, tau_in = 50, ta
         
         gradT, gamma_T = gd.compute_grad_B_LR(C_factors, A_factors, B_factors, Q, R, Lambda, gQ, gR, gamma, device, \
                                        alpha=alpha, dtype=dtype)
+        
         
         T = util.logSinkhorn(gradT - (gamma_T**-1)*torch.log(T), gQ, gR, gamma_T, max_iter = max_inneriters_balanced, \
                          device=device, dtype=dtype, balanced=True, unbalanced=False)
@@ -465,7 +468,7 @@ def FRLC_LR_opt(C_factors, A_factors, B_factors, a=None, b=None, tau_in = 50, ta
             '''
             Diagonalize return to factorization of Scetbon '21
             '''
-            Q = Q @ torch.diag(1 / gQ) @ T
+            Q = Q @ (torch.diag(1 / gQ) @ T)
             gR = R.T @ one_N2
             T = torch.diag(gR)
         return Q, R, T, errs

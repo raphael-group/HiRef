@@ -5,6 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 from typing import List, Callable, Union
+import time
 
 class HierarchicalRefinementOT:
     """
@@ -59,6 +60,8 @@ class HierarchicalRefinementOT:
         self.X, self.Y = None, None
         self.N = C.shape[0]
         self.Monge_clusters = None
+
+        
         
         assert C.shape[0] == C.shape[1], "Currently assume square costs so that |X| = |Y| = N"
     
@@ -149,19 +152,30 @@ class HierarchicalRefinementOT:
         for i, rank_level in enumerate(self.rank_schedule):
             # Iterate over ranks in the scheduler
             F_tp1 = []
+
+            if i == len(self.rank_schedule)-1:
+                fin_iters = int(self.N / rank_level)
+                print(f'Last level, rank chunk-size {rank_level} with {fin_iters} iterations to completion.')
+                j = 0
             
             for (idxX, idxY) in F_t:
+
+                if i == len(self.rank_schedule)-1:
+                    print(f'{j}/{fin_iters} of final-level iterations to completion')
+                    j += 1
                 
                 if len(idxX) <=self.base_rank or len(idxY) <= self.base_rank:
                     # Return tuple of base-rank sized index sets (e.g. (x,T(x)) for base_rank=1)
                     F_tp1.append( ( idxX, idxY ) )
                     continue
-
+                #s = time.time()
                 if self.C is not None:
                     Q,R = self._solve_prob( idxX, idxY, rank_level)
                 else:
                     rank_D = self.distance_rank_schedule[i]
                     Q,R = self._solve_LR_prob( idxX, idxY, rank_level, rank_D )
+                #e = time.time()
+                #print(f'time elapse solving LR: { e - s }')
                 
                 if self.plot_clusterings:
                     plt.figure(figsize=(12, 5))
@@ -176,11 +190,11 @@ class HierarchicalRefinementOT:
                     plt.colorbar()
                     plt.show()
                 
+                s = time.time()
                 # Next level cluster capacity
                 capacity = int( self.N / torch.prod( torch.Tensor(self.rank_schedule[0:i+1]) ) )
                 idx_seenX, idx_seenY = torch.arange(Q.shape[0], device=self.device), \
                                                     torch.arange(R.shape[0], device=self.device)
-                
                 # Split by hard or soft-clustering
                 if self.clustering_type == 'soft':
                     for z in range(rank_level):
@@ -207,7 +221,8 @@ class HierarchicalRefinementOT:
                                             "Assertion failed! Not a hard-clustering function, or point sets of unequal size!"
                         
                         F_tp1.append((idxX_z, idxY_z))
-            
+                e = time.time()
+                print(f'time elapsed after LR: {e - s}')
             F_t = F_tp1
         
         self.Monge_clusters = F_t
@@ -226,7 +241,7 @@ class HierarchicalRefinementOT:
         Solve problem for low-rank coupling under a low-rank factorization of distance matrix.
         """
         _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
-
+        print(f'x0 shape: {_x0.shape}, x1 shape: {_x1.shape}, rankD: {rankD}')
         if rankD < _x0.shape[0]:
             C1, C2 = util.low_rank_distance_factorization(_x0,
                                                           _x1,
@@ -243,24 +258,25 @@ class HierarchicalRefinementOT:
             Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
                                        gamma=30,
                                        r = rank_level,
-                                       max_iter=120,
+                                       max_iter=50,
                                        device=self.device,
-                                       min_iter = 40,
+                                       min_iter = 15,
                                        max_inneriters_balanced=100,
-                                       max_inneriters_relaxed=100,
+                                       max_inneriters_relaxed=40,
                                        diagonalize_return=True,
                                        printCost=False, tau_in=100000,
                                            dtype = C1.dtype)
+        
         else:
             C_XY = torch.cdist(_x0, _x1)
             Q, R, diagG, errs = FRLC_opt(C_XY,
                                    gamma=30,
                                    r = rank_level,
-                                   max_iter=120,
+                                   max_iter=50,
                                    device=self.device,
-                                   min_iter = 40,
+                                   min_iter = 15,
                                    max_inneriters_balanced=100,
-                                   max_inneriters_relaxed=100,
+                                   max_inneriters_relaxed=40,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000,
                                        dtype = C_XY.dtype)
@@ -279,11 +295,11 @@ class HierarchicalRefinementOT:
         Q, R, diagG, errs = self.solver(C_XY,
                                    gamma=30,
                                    r = rank_level,
-                                   max_iter=120,
+                                   max_iter=50,
                                    device=self.device,
-                                   min_iter = 40,
+                                   min_iter = 15,
                                    max_inneriters_balanced=100,
-                                   max_inneriters_relaxed=100,
+                                   max_inneriters_relaxed=40,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000,
                                        dtype = C_XY.dtype)
@@ -472,7 +488,17 @@ def hierarchical_refinement_parallelized(C, rank_schedule, solver, base_rank=1, 
                 submat = torch.index_select(C, 0, idxX)
                 C_XY = torch.index_select(submat, 1, idxY)
                 subproblem_args.append(
-                    ( C_XY, idxX, idxY, solver, i, rank_level, rank_schedule, base_rank, clustering_type, plot_clusterings, N )
+                    ( C_XY, 
+                     idxX, 
+                     idxY, 
+                     solver, 
+                     i, 
+                     rank_level, 
+                     rank_schedule, 
+                     base_rank, 
+                     clustering_type, 
+                     plot_clusterings, 
+                     N )
                 )
             
             print(f'Mapping subproblems')
