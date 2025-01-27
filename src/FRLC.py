@@ -451,8 +451,8 @@ def FRLC_LR_opt(C_factors, A_factors, B_factors, a=None, b=None, tau_in = 50, ta
                 errs['GW_cost'].append((GW_cost).cpu())
                 errs['total_cost'].append(((1-alpha)*primal_cost + alpha*GW_cost).cpu())
             else:
-                errs['GW_cost'].append('NA')
-                errs['total_cost'].append('NA')
+                errs['GW_cost'].append(0)
+                errs['total_cost'].append(primal_cost.cpu())
         
     if printCost:
         print(f"Initial Wasserstein cost: {errs['W_cost'][0]}, GW-cost: {errs['GW_cost'][0]}, Total cost: {errs['total_cost'][0]}")

@@ -57,7 +57,11 @@ class HierarchicalRefinementOT:
         self.plot_clusterings =  plot_clusterings
         self.parallel = parallel
         self.num_processes = num_processes
-        self.A, self.B = A.to(device), B.to(device)
+        
+        if A is not None and B is not None:
+            self.A, self.B = A.to(device), B.to(device)
+        else:
+            self.A, self.B = A, B
         
         # Point clouds optional attributes
         self.X, self.Y = None, None
@@ -251,19 +255,19 @@ class HierarchicalRefinementOT:
         print(f'x0 shape: {_x0.shape}, x1 shape: {_x1.shape}, rankD: {rankD}')
         
         if rankD < _x0.shape[0]:
-            C_factors, A_factors, B_factors = get_dist_mats(_x0, _x1, rankD, eps, Quadratic=self.Quadratic )
+            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, rankD, eps, Quadratic=self.Quadratic )
             # Solve a low-rank OT sub-problem with black-box solver
             Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
                                        gamma=30,
                                        r = rank_level,
-                                       max_iter=50,
+                                       max_iter=60,
                                        device=self.device,
-                                       min_iter = 15,
+                                       min_iter = 25,
                                        max_inneriters_balanced=100,
                                        max_inneriters_relaxed=40,
                                        diagonalize_return=True,
                                        printCost=False, tau_in=100000,
-                                        dtype = C1.dtype, alpha=self.alpha)
+                                        dtype = _x0.dtype, alpha=self.alpha)
         
         else:
             # Rank = shape; can compute cost in full and run standard LR-OT
@@ -276,9 +280,9 @@ class HierarchicalRefinementOT:
             Q, R, diagG, errs = FRLC_opt(C_XY, A=A_XY, B=B_XY,
                                    gamma=30,
                                    r = rank_level,
-                                   max_iter=50,
+                                   max_iter=60,
                                    device=self.device,
-                                   min_iter = 15,
+                                   min_iter = 25,
                                    max_inneriters_balanced=100,
                                    max_inneriters_relaxed=40,
                                    diagonalize_return=True,
@@ -343,19 +347,19 @@ class HierarchicalRefinementOT:
         return cost
 
     
-    def get_dist_mats(_x0, _x1, rankD, eps , Quadratic ):
+    def get_dist_mats(self, _x0, _x1, rankD, eps , Quadratic ):
         
         if Quadratic:
-            A_factors = ret_normalized_cost(_x0, _x0, rankD, eps)
-            B_factors = ret_normalized_cost(_x1, _x1, rankD, eps)
+            A_factors = self.ret_normalized_cost(_x0, _x0, rankD, eps)
+            B_factors = self.ret_normalized_cost(_x1, _x1, rankD, eps)
         else:
             A_factors = None
             B_factors = None
             
-        C_factors = ret_normalized_cost(_x0, _x1, rankD, eps)
+        C_factors = self.ret_normalized_cost(_x0, _x1, rankD, eps)
         return C_factors, A_factors, B_factors
     
-    def ret_normalized_cost(X, Y, rankD, eps):
+    def ret_normalized_cost(self, X, Y, rankD, eps):
         C1, C2 = util.low_rank_distance_factorization(X,
                                                       Y,
                                                       r=rankD,
@@ -364,5 +368,5 @@ class HierarchicalRefinementOT:
         # Normalize appropriately
         c = ( C1.max()**1/2 ) * ( C2.max()**1/2 )
         C1, C2 = C1/c, C2/c
-        C_factors = (C1, C2)
+        C_factors = (C1.to(X.dtype), C2.to(X.dtype))
         return C_factors
