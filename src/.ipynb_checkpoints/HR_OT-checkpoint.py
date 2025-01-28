@@ -43,9 +43,7 @@ class HierarchicalRefinementOT:
                  clustering_type: str = 'soft',
                  plot_clusterings: bool = False,
                  parallel: bool = False,
-                 num_processes: Union[int, None] = None,
-                 A = None,
-                 B = None, alpha=0.0
+                 num_processes: Union[int, None] = None
                 ):
     
         self.C = C.to(device)
@@ -58,18 +56,12 @@ class HierarchicalRefinementOT:
         self.parallel = parallel
         self.num_processes = num_processes
         
-        if A is not None and B is not None:
-            self.A, self.B = A.to(device), B.to(device)
-        else:
-            self.A, self.B = A, B
-        
         # Point clouds optional attributes
         self.X, self.Y = None, None
         self.N = C.shape[0]
         self.Monge_clusters = None
-        self.Quadratic = True if (A is not None or B is not None) else False
-        self.alpha = alpha
-        
+        # This is a dummy line -- this init doesn't compute C or its factorization
+        self.sq_Euclidean = False
         
         assert C.shape[0] == C.shape[1], "Currently assume square costs so that |X| = |Y| = N"
     
@@ -86,7 +78,7 @@ class HierarchicalRefinementOT:
                             plot_clusterings: bool = False,
                             parallel: bool = False,
                             num_processes: Union[int, None] = None,
-                              Quadratic=False, alpha=0.0):
+                              sq_Euclidean = False):
         r"""
         Constructor for initializing from point clouds.
         
@@ -124,8 +116,7 @@ class HierarchicalRefinementOT:
         # Cost-mat an optional attribute
         obj.C = None
         obj.Monge_clusters = None
-        obj.Quadratic = Quadratic
-        obj.alpha = alpha
+        obj.sq_Euclidean = sq_Euclidean
         
         assert X.shape[0] == Y.shape[0], "Currently assume square costs so that |X| = |Y| = N"
         
@@ -179,16 +170,15 @@ class HierarchicalRefinementOT:
                     # Return tuple of base-rank sized index sets (e.g. (x,T(x)) for base_rank=1)
                     F_tp1.append( ( idxX, idxY ) )
                     continue
-                #s = time.time()
+                
                 if self.C is not None:
                     Q,R = self._solve_prob( idxX, idxY, rank_level)
                 else:
                     rank_D = self.distance_rank_schedule[i]
                     Q,R = self._solve_LR_prob( idxX, idxY, rank_level, rank_D )
-                #e = time.time()
-                #print(f'time elapse solving LR: { e - s }')
                 
                 if self.plot_clusterings:
+                    
                     plt.figure(figsize=(12, 5))
                     plt.subplot(1, 2, 1)
                     plt.imshow(Q.detach().cpu().numpy(), aspect='auto', cmap='viridis')
@@ -201,7 +191,6 @@ class HierarchicalRefinementOT:
                     plt.colorbar()
                     plt.show()
                 
-                s = time.time()
                 # Next level cluster capacity
                 capacity = int( self.N / torch.prod( torch.Tensor(self.rank_schedule[0:i+1]) ) )
                 idx_seenX, idx_seenY = torch.arange(Q.shape[0], device=self.device), \
@@ -232,8 +221,7 @@ class HierarchicalRefinementOT:
                                             "Assertion failed! Not a hard-clustering function, or point sets of unequal size!"
                         
                         F_tp1.append((idxX_z, idxY_z))
-                e = time.time()
-                print(f'time elapsed after LR: {e - s}')
+                        
             F_t = F_tp1
         
         self.Monge_clusters = F_t
@@ -255,7 +243,9 @@ class HierarchicalRefinementOT:
         print(f'x0 shape: {_x0.shape}, x1 shape: {_x1.shape}, rankD: {rankD}')
         
         if rankD < _x0.shape[0]:
-            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, rankD, eps, Quadratic=self.Quadratic )
+            
+            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, rankD, eps, self.sq_Euclidean )
+            
             # Solve a low-rank OT sub-problem with black-box solver
             Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
                                        gamma=30,
@@ -267,17 +257,16 @@ class HierarchicalRefinementOT:
                                        max_inneriters_relaxed=40,
                                        diagonalize_return=True,
                                        printCost=False, tau_in=100000,
-                                        dtype = _x0.dtype, alpha=self.alpha)
+                                        dtype = _x0.dtype)
         
         else:
-            # Rank = shape; can compute cost in full and run standard LR-OT
-            if self.Quadratic:
-                A_XY, B_XY = torch.cdist(_x0, _x0), torch.cdist(_x1, _x1)
+            if self.sq_Euclidean:
+                C_XY = torch.cdist(_x0, _x1)**2
             else:
-                A_XY, B_XY = None, None
+                # normal Euclidean distance otherwise
+                C_XY = torch.cdist(_x0, _x1)
             
-            C_XY = torch.cdist(_x0, _x1)
-            Q, R, diagG, errs = FRLC_opt(C_XY, A=A_XY, B=B_XY,
+            Q, R, diagG, errs = FRLC_opt(C_XY,
                                    gamma=30,
                                    r = rank_level,
                                    max_iter=60,
@@ -287,7 +276,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_relaxed=40,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000,
-                                       dtype = C_XY.dtype, alpha=self.alpha)
+                                       dtype = C_XY.dtype)
         return Q, R
         
     def _solve_prob(self, idxX, idxY, rank_level):
@@ -299,15 +288,8 @@ class HierarchicalRefinementOT:
         submat = torch.index_select(self.C, 0, idxX)
         C_XY = torch.index_select(submat, 1, idxY)
         
-        if self.A is not None and self.B is not None:
-            # Case: costs given as input
-            A_XY = torch.index_select(torch.index_select(self.A, 0, idxX), 1, idxX)
-            B_XY = torch.index_select(torch.index_select(self.B, 0, idxY), 1, idxY)
-        else:
-            A_XY, B_XY = None, None
-        
         # Solve a low-rank OT sub-problem with black-box solver
-        Q, R, diagG, errs = self.solver(C_XY, A=A_XY, B=B_XY,
+        Q, R, diagG, errs = self.solver(C_XY,
                                    gamma=30,
                                    r = rank_level,
                                    max_iter=50,
@@ -317,7 +299,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_relaxed=40,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000,
-                                       dtype = C_XY.dtype, alpha=self.alpha)
+                                       dtype = C_XY.dtype)
         return Q, R
     
     def _compute_coupling_from_Ft(self):
@@ -347,19 +329,23 @@ class HierarchicalRefinementOT:
         return cost
 
     
-    def get_dist_mats(self, _x0, _x1, rankD, eps , Quadratic ):
+    def get_dist_mats(self, _x0, _x1, rankD, eps , sq_Euclidean ):
         
-        if Quadratic:
-            A_factors = self.ret_normalized_cost(_x0, _x0, rankD, eps)
-            B_factors = self.ret_normalized_cost(_x1, _x1, rankD, eps)
+        # Wasserstein-only, setting A and B factors to be NoneType
+        A_factors = None
+        B_factors = None
+        
+        if sq_Euclidean:
+            # Sq Euclidean
+            C_factors = compute_lr_sqeuclidean_matrix(_x0, _x1, True)
         else:
-            A_factors = None
-            B_factors = None
-            
-        C_factors = self.ret_normalized_cost(_x0, _x1, rankD, eps)
+            # Standard Euclidean dist
+            C_factors = self.ret_normalized_cost(_x0, _x1, rankD, eps)
+        
         return C_factors, A_factors, B_factors
     
     def ret_normalized_cost(self, X, Y, rankD, eps):
+        
         C1, C2 = util.low_rank_distance_factorization(X,
                                                       Y,
                                                       r=rankD,
@@ -369,4 +355,48 @@ class HierarchicalRefinementOT:
         c = ( C1.max()**1/2 ) * ( C2.max()**1/2 )
         C1, C2 = C1/c, C2/c
         C_factors = (C1.to(X.dtype), C2.to(X.dtype))
+        
         return C_factors
+
+
+def compute_lr_sqeuclidean_matrix(X_s,
+                                  X_t,
+                                  rescale_cost,
+                                  device=None,
+                                  dtype=None):
+    """
+    Adapted from "Section 3.5, proposition 1" in Scetbon, M., Cuturi, M., & Peyré, G. (2021).
+    """
+    dtype, device = X_s.dtype, X_s.device
+    
+    ns, dim = X_s.shape
+    nt, _ = X_t.shape
+    
+    # First low rank decomposition of the cost matrix (M1)
+    # Compute sum of squares for each source sample
+    sum_Xs_sq = torch.sum(X_s ** 2, dim=1).reshape(ns, 1)  # Shape: (ns, 1)
+    ones_ns = torch.ones((ns, 1), device=device, dtype=dtype)  # Shape: (ns, 1)
+    neg_two_Xs = -2 * X_s  # Shape: (ns, dim)
+    M1 = torch.cat((sum_Xs_sq, ones_ns, neg_two_Xs), dim=1)  # Shape: (ns, dim + 2)
+    
+    # Second low rank decomposition of the cost matrix (M2)
+    ones_nt = torch.ones((nt, 1), device=device, dtype=dtype)  # Shape: (nt, 1)
+    sum_Xt_sq = torch.sum(X_t ** 2, dim=1).reshape(nt, 1)  # Shape: (nt, 1)
+    Xt = X_t  # Shape: (nt, dim)
+    M2 = torch.cat((ones_nt, sum_Xt_sq, Xt), dim=1)  # Shape: (nt, dim + 2)
+    
+    if rescale_cost:
+        # Compute the maximum value in M1 and M2 for rescaling
+        max_M1 = torch.max(M1)
+        max_M2 = torch.max(M2)
+        
+        # Avoid division by zero
+        if max_M1 > 0:
+            M1 = M1 / torch.sqrt(max_M1)
+        if max_M2 > 0:
+            M2 = M2 / torch.sqrt(max_M2)
+    
+    return (M1, M2.T)
+
+
+
