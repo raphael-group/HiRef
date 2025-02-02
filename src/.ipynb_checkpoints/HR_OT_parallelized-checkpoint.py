@@ -17,7 +17,6 @@ Parallelized version (not object oriented for now)
 def HROT_worker_subproblem(args):
     
     C_XY, idxX, idxY, solver, i, rank_level, rank_schedule, base_rank, clustering_type, plot_clusterings, N = args
-    #C_XY = global_cost_matrix[idxX][:, idxY]
     
     # Parallelization not GPU optimized currently (but can be, of course)
     device='cpu'
@@ -38,7 +37,6 @@ def HROT_worker_subproblem(args):
                                    max_inneriters_relaxed=100,
                                    diagonalize_return=True,
                                    printCost=False, tau_in=100000)
-        print(torch.diag(diagG))
         
     except Exception as e:
         print(f'Solver failed with error: {e}')

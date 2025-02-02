@@ -80,12 +80,6 @@ def optimal_rank_schedule(n, hierarchy_depth=6, max_Q=int(2**10), max_rank=16):
     print(f'Optimized rank-annealing schedule: { rank_schedule }')
     
     assert functools.reduce(operator.mul, rank_schedule) == n, "Error! Rank-schedule does not factorize n!"
-    '''
-    RS = torch.tensor(rank_schedule)[:-1]
-    print(RS)
-    print(torch.cumprod(RS))
-    LR_runs = torch.cumsum(torch.cumprod(RS)).sum() + 1
-    print(f'Runs required before terminal Q-size case: {LR_runs}')
-    '''
+    
     return rank_schedule
     
