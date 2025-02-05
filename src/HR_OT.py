@@ -4,7 +4,7 @@ import util
 import torch
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
-from typing import List, Callable, Union
+from typing import List, Callable, Union, Dict, Any
 import time
 
 class HierarchicalRefinementOT:
@@ -20,6 +20,8 @@ class HierarchicalRefinementOT:
         The list of ranks for each hierarchical level -- i.e. the rank-annealing schedule.
     solver : callable
         A low-rank OT solver that takes a cost submatrix and returns Q, R, diagG, errs.
+    solver_params: Dict[str, Any], optional
+        Additional parameters for the low-rank solver. If None, default values are used.
     device : str
         The device ('cpu' or 'cuda') to be used for computations.
     base_rank : int
@@ -47,6 +49,7 @@ class HierarchicalRefinementOT:
                 C: torch.Tensor,
                  rank_schedule: List[int],
                  solver: Callable = FRLC_opt,
+                 solver_params: Union[Dict[str, Any] , None] = None,
                  device: str = 'cpu',
                  base_rank: int = 1,
                  clustering_type: str = 'soft',
@@ -71,6 +74,20 @@ class HierarchicalRefinementOT:
         self.Monge_clusters = None
         # This is a dummy line -- this init doesn't compute C or its factorization
         self.sq_Euclidean = False
+
+        # Setting parameters to use with the FRLC solver
+        default_solver_params = {
+            'gamma' : 30,
+            'max_iter' : 60,
+            'min_iter' : 25,
+            'max_inneriters_balanced' : 100,
+            'max_inneriters_relaxed' : 40,
+            'printCost' : False,
+            'tau_in' : 100000
+        }
+        if solver_params is not None:
+            default_solver_params.update(solver_params)
+        self.solver_params = default_solver_params
         
         assert C.shape[0] == C.shape[1], "Currently assume square costs so that |X| = |Y| = N"
     
@@ -81,6 +98,7 @@ class HierarchicalRefinementOT:
                             rank_schedule: List[int],
                             distance_rank_schedule: Union[List[int], None] = None,
                             solver: Callable = FRLC_LR_opt,
+                            solver_params: Union[Dict[str, Any] , None] = None,
                             device: str = 'cpu',
                             base_rank: int = 1,
                             clustering_type: str = 'soft',
@@ -126,6 +144,20 @@ class HierarchicalRefinementOT:
         obj.C = None
         obj.Monge_clusters = None
         obj.sq_Euclidean = sq_Euclidean
+
+        # Setting parameters to use with the FRLC solver
+        default_solver_params = {
+            'gamma' : 30,
+            'max_iter' : 60,
+            'min_iter' : 25,
+            'max_inneriters_balanced' : 100,
+            'max_inneriters_relaxed' : 40,
+            'printCost' : False,
+            'tau_in' : 100000
+        }
+        if solver_params is not None:
+            default_solver_params.update(solver_params)
+        obj.solver_params = default_solver_params
         
         assert X.shape[0] == Y.shape[0], "Currently assume square costs so that |X| = |Y| = N"
         
@@ -241,7 +273,7 @@ class HierarchicalRefinementOT:
             return self._compute_coupling_from_Ft()
 
     def _hierarchical_refinement_parallelized():
-        
+        # In separate file, without LR-distance matrix for the moment.
         raise NotImplementedError
 
     def _solve_LR_prob(self, idxX, idxY, rank_level, rankD, eps=0.04):
@@ -255,19 +287,21 @@ class HierarchicalRefinementOT:
         
         if rankD < _x0.shape[0]:
             
-            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, rankD, eps, self.sq_Euclidean )
+            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, 
+                                                                 rankD, eps, 
+                                                                 self.sq_Euclidean )
             
             # Solve a low-rank OT sub-problem with black-box solver
             Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
-                                       gamma=30,
+                                       gamma = self.solver_params['gamma'],
                                        r = rank_level,
-                                       max_iter=60,
+                                       max_iter = self.solver_params['max_iter'],
                                        device=self.device,
-                                       min_iter = 25,
-                                       max_inneriters_balanced=100,
-                                       max_inneriters_relaxed=40,
-                                       diagonalize_return=True,
-                                       printCost=False, tau_in=100000,
+                                       min_iter = self.solver_params['min_iter'],
+                                       max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
+                                       max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
+                                       diagonalize_return = True,
+                                       printCost = False, tau_in = self.solver_params['tau_in'],
                                         dtype = _x0.dtype)
         
         else:
@@ -279,15 +313,15 @@ class HierarchicalRefinementOT:
                 C_XY = torch.cdist(_x0, _x1)
             
             Q, R, diagG, errs = FRLC_opt(C_XY,
-                                   gamma=30,
+                                   gamma = self.solver_params['gamma'],
                                    r = rank_level,
-                                   max_iter=60,
-                                   device=self.device,
-                                   min_iter = 25,
-                                   max_inneriters_balanced=100,
-                                   max_inneriters_relaxed=40,
+                                   max_iter = self.solver_params['max_iter'],
+                                   device = self.device,
+                                   min_iter = self.solver_params['min_iter'],
+                                   max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
+                                   max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
-                                   printCost=False, tau_in=100000,
+                                   printCost=False, tau_in = self.solver_params['tau_in'],
                                        dtype = C_XY.dtype)
         return Q, R
         
@@ -302,15 +336,15 @@ class HierarchicalRefinementOT:
         
         # Solve a low-rank OT sub-problem with black-box solver
         Q, R, diagG, errs = self.solver(C_XY,
-                                   gamma=30,
+                                   gamma = self.solver_params['gamma'],
                                    r = rank_level,
-                                   max_iter=50,
+                                   max_iter = self.solver_params['max_iter'],
                                    device=self.device,
-                                   min_iter = 15,
-                                   max_inneriters_balanced=100,
-                                   max_inneriters_relaxed=40,
+                                   min_iter = self.solver_params['min_iter'],
+                                   max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
+                                   max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
-                                   printCost=False, tau_in=100000,
+                                   printCost=False, tau_in = self.solver_params['tau_in'],
                                        dtype = C_XY.dtype)
         return Q, R
     
