@@ -236,9 +236,11 @@ class HierarchicalRefinementOT:
         raise NotImplementedError
 
     def _solve_LR_prob(self, idxX, idxY, rank_level, rankD, eps=0.04):
+        
         """
         Solve problem for low-rank coupling under a low-rank factorization of distance matrix.
         """
+        
         _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
         print(f'x0 shape: {_x0.shape}, x1 shape: {_x1.shape}, rankD: {rankD}')
         
@@ -260,6 +262,7 @@ class HierarchicalRefinementOT:
                                         dtype = _x0.dtype)
         
         else:
+            # Final base instance -- cost within-cluster costs explicitly
             if self.sq_Euclidean:
                 C_XY = torch.cdist(_x0, _x1)**2
             else:
@@ -324,7 +327,12 @@ class HierarchicalRefinementOT:
                 cost += self.C[idx1, idx2]
             else:
                 # Note: LR-factorization for Euclidean dist
-                cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])
+                if self.sq_Euclidean:
+                    # squared Euclidean case
+                    cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])**2
+                else:
+                    # normal Euclidean cost
+                    cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])
         cost = cost / self.N
         return cost
 
