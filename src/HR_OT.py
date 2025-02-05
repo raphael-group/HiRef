@@ -32,6 +32,15 @@ class HierarchicalRefinementOT:
         Whether to execute each subproblem at a level in parallel.
     num_processes : int or None
         Number of worker processes to spawn (if `parallel=True`). Defaults to `None` which uses `mp.cpu_count()`.
+    X, Y : torch.tensor
+        The point-clouds for the first dataset (X) and the second dataset (Y)
+    N : int
+        The size of the dataset.
+    Monge_clusters : list (tuples of type torch.float)
+        A list containing the Monge-map pairings
+    sq_Euclidean : bool
+        If True, assumes squared Euclidean cost. Otherwise, defaults to Euclidean.
+    
     """
     
     def __init__(self,
