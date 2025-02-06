@@ -1,11 +1,17 @@
+# Solver imports
 import FRLC
 from FRLC import FRLC_opt, FRLC_LR_opt
 import util
+# Other misc imports
 import torch
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 from typing import List, Callable, Union, Dict, Any
 import time
+
+
+
+
 
 class HierarchicalRefinementOT:
     """
@@ -40,9 +46,6 @@ class HierarchicalRefinementOT:
         The size of the dataset.
     Monge_clusters : list (tuples of type torch.float)
         A list containing the Monge-map pairings
-    sq_Euclidean : bool
-        If True, assumes squared Euclidean cost. Otherwise, defaults to Euclidean.
-    
     """
     
     def __init__(self,
@@ -117,6 +120,10 @@ class HierarchicalRefinementOT:
             Point cloud of shape N for measure \nu
         distance_rank_schedule: List[int]
             A separate rank-schedule for the low-rank distance matrix being factorized.
+        sq_Euclidean : bool
+            If True, assumes squared Euclidean cost. Otherwise, defaults to Euclidean.
+            Needed for the point-cloud variant, in order to define a distance metric
+            to use for the low-rank approximation of C.
         """
         
         obj = cls.__new__(cls)
@@ -180,6 +187,7 @@ class HierarchicalRefinementOT:
             If return_as_coupling=True: returns a dense coupling matrix of shape (N, N).
         """
         if self.parallel:
+            """ WARNING: not currently implemented in this class! See HR_OT_parallelized instead! """
             return self._hierarchical_refinement_parallelized(return_as_coupling = return_as_coupling)
         else:
             return self._hierarchical_refinement(return_as_coupling = return_as_coupling)
@@ -188,10 +196,11 @@ class HierarchicalRefinementOT:
         """
         Single-process (serial) Hierarchical Refinement
         """
-            
+
+        # Define partitions
         F_t = [(torch.arange( self.N , device=self.device), 
                 torch.arange( self.N , device=self.device))]
-    
+        
         for i, rank_level in enumerate(self.rank_schedule):
             # Iterate over ranks in the scheduler
             F_tp1 = []
@@ -219,6 +228,7 @@ class HierarchicalRefinementOT:
                     Q,R = self._solve_LR_prob( idxX, idxY, rank_level, rank_D )
                 
                 if self.plot_clusterings:
+                    # If visualizing the Q - R clustering matrices.
                     
                     plt.figure(figsize=(12, 5))
                     plt.subplot(1, 2, 1)
@@ -236,9 +246,13 @@ class HierarchicalRefinementOT:
                 capacity = int( self.N / torch.prod( torch.Tensor(self.rank_schedule[0:i+1]) ) )
                 idx_seenX, idx_seenY = torch.arange(Q.shape[0], device=self.device), \
                                                     torch.arange(R.shape[0], device=self.device)
+                
                 # Split by hard or soft-clustering
                 if self.clustering_type == 'soft':
+                    # If using a solver which returns "soft" clusterings, must strictly fill partitions to capacities.
+                    
                     for z in range(rank_level):
+                        
                         topk_values, topk_indices_X = torch.topk( Q[idx_seenX][:,z], k=capacity )
                         idxX_z = idxX[idx_seenX[topk_indices_X]]
                         topk_values, topk_indices_Y = torch.topk( R[idx_seenY][:,z], k=capacity )
@@ -250,6 +264,8 @@ class HierarchicalRefinementOT:
                         idx_seenY = idx_seenY[~torch.isin(idx_seenY, idx_seenY[topk_indices_Y])]
                 
                 elif clustering_type == 'hard':
+                    # If using a solver which returns "hard" clusterings, can exactly take argmax.
+                    
                     zX = torch.argmax(Q, axis=1) # X-assignments
                     zY = torch.argmax(R, axis=1) # Y-assignments
                     
@@ -266,14 +282,16 @@ class HierarchicalRefinementOT:
             F_t = F_tp1
         
         self.Monge_clusters = F_t
+
         
         if return_as_coupling is False:
             return self.Monge_clusters
         else:
             return self._compute_coupling_from_Ft()
-
+    
+    
     def _hierarchical_refinement_parallelized():
-        # In separate file, without LR-distance matrix for the moment.
+        # In separate file, without low-rank distance matrix for the moment!
         raise NotImplementedError
 
     def _solve_LR_prob(self, idxX, idxY, rank_level, rankD, eps=0.04):
@@ -305,9 +323,11 @@ class HierarchicalRefinementOT:
                                         dtype = _x0.dtype)
         
         else:
+            
             # Final base instance -- cost within-cluster costs explicitly
             if self.sq_Euclidean:
                 C_XY = torch.cdist(_x0, _x1)**2
+                
             else:
                 # normal Euclidean distance otherwise
                 C_XY = torch.cdist(_x0, _x1)
@@ -323,6 +343,7 @@ class HierarchicalRefinementOT:
                                    diagonalize_return=True,
                                    printCost=False, tau_in = self.solver_params['tau_in'],
                                        dtype = C_XY.dtype)
+            
         return Q, R
         
     def _solve_prob(self, idxX, idxY, rank_level):
@@ -354,28 +375,33 @@ class HierarchicalRefinementOT:
         """
         size = (self.N, self.N)
         P = torch.zeros(size)
+        # Fill sparse coupling with entries
         for pair in self.Monge_clusters:
             idx1, idx2 = pair
             P[idx1, idx2] = 1
+        # Return, trivially normalized to satisfy standard OT constraints
         return P / self.N
     
     def compute_OT_cost(self):
         """
         Compute the optimal transport in linear space and time (w/o coupling).
         """
+        
         cost = 0
         for clus in self.Monge_clusters:
             idx1, idx2 = clus
             if self.C is not None:
+                # If C saved, index into general cost directly
                 cost += self.C[idx1, idx2]
             else:
-                # Note: LR-factorization for Euclidean dist
+                # In case point-cloud init used, must directly compute distances between point pairs in X, Y.
                 if self.sq_Euclidean:
                     # squared Euclidean case
                     cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])**2
                 else:
                     # normal Euclidean cost
                     cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])
+        # Appropriately normalize the cost
         cost = cost / self.N
         return cost
 
@@ -410,6 +436,7 @@ class HierarchicalRefinementOT:
         return C_factors
 
 
+
 def compute_lr_sqeuclidean_matrix(X_s,
                                   X_t,
                                   rescale_cost,
@@ -417,6 +444,9 @@ def compute_lr_sqeuclidean_matrix(X_s,
                                   dtype=None):
     """
     Adapted from "Section 3.5, proposition 1" in Scetbon, M., Cuturi, M., & Peyré, G. (2021).
+    
+    A function for computing a low-rank factorization of a squared Euclidean distance matrix.
+    
     """
     dtype, device = X_s.dtype, X_s.device
     
