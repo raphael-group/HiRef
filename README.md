@@ -36,7 +36,7 @@ rank_schedule = rank_annealing.optimal_rank_schedule(
 ```
 
 ### **2. Initialize Hierarchical Refinement**
-Import HR_OT and initialize the class using only the point clouds (you can additionally input the cost `C` if desired).
+Import HR_OT and initialize the class using only the point clouds (you can additionally input the cost `C` if desired) along with any relevant parameters (e.g., **sq_Euclidean**) for your problem.
 ```python
 import HR_OT
 hrot = HR_OT.HierarchicalRefinementOT.init_from_point_clouds(
