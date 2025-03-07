@@ -32,4 +32,5 @@ import rank_annealing
 
 rank_schedule = rank_annealing.optimal_rank_schedule(
     n=n, hierarchy_depth=hierarchy_depth, max_Q=max_Q, max_rank=max_rank
-)
+)```
+...
