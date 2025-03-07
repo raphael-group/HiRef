@@ -1,6 +1,6 @@
 # Hierarchical Refinement (HiRef)
 
-This is the repository for the paper **"Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"** which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
+This is the repository for the paper **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://arxiv.org/pdf/2503.03025)** which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
 
 ![Hierarchical Refinement Schematic](images/fig1-2.png)
 
