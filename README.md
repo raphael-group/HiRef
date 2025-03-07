@@ -58,4 +58,4 @@ print(f"Refinement Cost: {cost_hr_ot.item()}")
 
 ## Contact
 
-For questions, discussions, or collaboration inquiries, feel free to reach out at [ph3641@princeton.edu](mailto:ph3641@princeton.edu).
+For questions, discussions, or collaboration inquiries, feel free to reach out at [ph3641@princeton.edu](mailto:ph3641@princeton.edu) or [jg7090@princeton.edu](mailto:jg7090@princeton.edu).
