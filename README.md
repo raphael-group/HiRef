@@ -55,3 +55,7 @@ To print the Optimal Transport (OT) cost, simply call:
 cost_hr_ot = hrot.compute_OT_cost()
 print(f"Refinement Cost: {cost_hr_ot.item()}")
 ```
+
+## Contact
+
+For questions, discussions, or collaboration inquiries, feel free to reach out at [ph3641@princeton.edu](mailto:ph3641@princeton.edu).
