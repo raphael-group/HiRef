@@ -32,5 +32,26 @@ import rank_annealing
 
 rank_schedule = rank_annealing.optimal_rank_schedule(
     n=n, hierarchy_depth=hierarchy_depth, max_Q=max_Q, max_rank=max_rank
-)```
-...
+)
+```
+
+### **2. Initialize Hierarchical Refinement**
+Import HR_OT and initialize the class using only the point clouds (you can additionally input the cost `C` if desired).
+```python
+import HR_OT
+hrot = HR_OT.HierarchicalRefinementOT.init_from_point_clouds(
+    X, Y, rank_schedule, base_rank=1, device=device
+)
+```
+### **3. Run Hierarchical Refinement**
+Run and return paired tuples from `X` and `Y`:
+
+```python
+F_lr = hrot.run(return_as_coupling=False)
+```
+### **4. Compute the OT primal cost**
+To print the Optimal Transport (OT) cost, simply call:
+```python
+cost_hr_ot = hrot.compute_OT_cost()
+print(f"Refinement Cost: {cost_hr_ot.item()}")
+```
