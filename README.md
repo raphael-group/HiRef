@@ -2,7 +2,7 @@
 
 This is the repository for the paper **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://arxiv.org/pdf/2503.03025)** which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
 
-![Hierarchical Refinement Schematic](images/fig1-2.png)
+<img src="images/fig1-2.png" alt="Hierarchical Refinement Schematic" width="50%">
 
 *Figure 1: Hierarchical Refinement algorithm: low-rank optimal transport is used to progressively refine partitions at the previous scale, with the coarsest scale partitions denoted \(X^{(1)}, Y^{(1)}\), and the finest scale partitions \(X^{(\kappa)}, Y^{(\kappa)}\) corresponding to the individual points in the datasets.*
 
