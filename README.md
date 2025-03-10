@@ -4,7 +4,7 @@ This is the repository for the paper **["Hierarchical Refinement: Optimal Transp
 
 <img src="images/fig1-2.png" alt="Hierarchical Refinement Schematic" width="50%">
 
-*Figure 1: Hierarchical Refinement algorithm: low-rank optimal transport is used to progressively refine partitions at the previous scale, with the coarsest scale partitions denoted* \(X^{(1)}, Y^{(1)}\) *, and the finest scale partitions* \(X^{(\kappa)}, Y^{(\kappa)}\) *corresponding to the individual points in the datasets.*
+*Figure 1: Hierarchical Refinement algorithm: low-rank optimal transport is used to progressively refine partitions at the previous scale, with the coarsest scale partitions denoted $X^{ (1) }, Y^{ (1) } $, and the finest scale partitions* \(X^{(\kappa)}, Y^{(\kappa)}\) *corresponding to the individual points in the datasets.*
 
 ---
 
