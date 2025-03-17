@@ -44,7 +44,7 @@ hrot = HR_OT.HierarchicalRefinementOT.init_from_point_clouds(
 )
 ```
 ### **3. Run Hierarchical Refinement**
-Run and return paired tuples from `X` and `Y`:
+Run and return paired tuples from `X` and `Y` (the bijective Monge map between the datasets):
 
 ```python
 Gamma_hrot = hrot.run(return_as_coupling=False)
