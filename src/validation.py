@@ -1,5 +1,12 @@
 import numpy as np
+import scipy
 from scipy.optimize import linprog
+from tqdm import tqdm
+import jax
+import jax.numpy as jnp
+from ott.geometry.geometry import Geometry
+from ott.problems.linear import linear_problem
+from ott.solvers.linear import sinkhorn
 
 def solve_ot_lp(p, q, C):
     """
@@ -65,3 +72,62 @@ def solve_ot_lp(p, q, C):
     min_cost = res.fun  # c^T x
     
     return gamma, min_cost
+
+@jax.jit
+def sinkhorn_batch(xs, ys, p=1):
+    
+    cost_mat = jnp.linalg.norm(xs[:, None, :] - ys[None, :, :], axis=-1) ** p
+    geom = Geometry(cost_mat)
+    ot_problem = linear_problem.LinearProblem(geom)
+    solver = sinkhorn.Sinkhorn()
+    ot_solution = solver(ot_problem)
+    gamma = ot_solution.matrix
+    batch_cost = jnp.sum(cost_mat * gamma)
+    
+    return batch_cost
+
+
+
+def minibatch_sinkhorn_ot_without_replacement(X, Y, batch_size, p=1):
+    """
+    Compute mini-batch OT using entropic regularization (Sinkhorn via ott-jax) without replacement.
+    The Sinkhorn computation is precompiled with JAX to reduce overhead and memory issues.
+
+    Parameters:
+      X: np.array, shape (n, d) - source samples.
+      Y: np.array, shape (n, d) - target samples.
+      batch_size: int - number of samples in each mini-batch.
+      reg: float - entropic regularization parameter.
+      max_iterations: int - maximum iterations for the Sinkhorn solver.
+      p: float - power for the cost (default is 1, but cost is computed as squared Euclidean).
+
+    Returns:
+      Average transport cost over the mini-batches.
+    """
+    
+    n = X.shape[0]
+    assert X.shape[0] == Y.shape[0], "X and Y must have the same number of points."
+
+    batch_size = min(n, batch_size)
+    
+    # Create a random permutation for batching without replacement.
+    perm = np.random.permutation(n)
+    batches = [(perm[i:i+batch_size], perm[i:i+batch_size])
+               for i in range(0, n, batch_size)]
+    
+    total_cost = 0.0
+    num_batches = len(batches)
+    
+    for idx_src, idx_tgt in tqdm(batches, desc="Mini-batch Sinkhorn"):
+        # Convert the mini-batch data to jax.numpy arrays.
+        xs = jnp.array(X[idx_src])
+        ys = jnp.array(Y[idx_tgt])
+        
+        # Use the precompiled Sinkhorn function.
+        batch_cost = float(sinkhorn_batch(xs, ys))
+        total_cost += batch_cost
+
+    # Return the average cost across batches.
+    return total_cost / num_batches
+
+
