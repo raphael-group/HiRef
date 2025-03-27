@@ -76,6 +76,7 @@ def solve_ot_lp(p, q, C):
 @jax.jit
 def sinkhorn_batch(xs, ys, p=1):
     
+    # Pre-compile a jitted instance
     cost_mat = jnp.linalg.norm(xs[:, None, :] - ys[None, :, :], axis=-1) ** p
     geom = Geometry(cost_mat)
     ot_problem = linear_problem.LinearProblem(geom)
@@ -87,22 +88,18 @@ def sinkhorn_batch(xs, ys, p=1):
     return batch_cost
 
 
-
 def minibatch_sinkhorn_ot_without_replacement(X, Y, batch_size, p=1):
     """
     Compute mini-batch OT using entropic regularization (Sinkhorn via ott-jax) without replacement.
-    The Sinkhorn computation is precompiled with JAX to reduce overhead and memory issues.
-
+    Implicit coupling corresponds to definition 6 of 
     Parameters:
       X: np.array, shape (n, d) - source samples.
       Y: np.array, shape (n, d) - target samples.
       batch_size: int - number of samples in each mini-batch.
-      reg: float - entropic regularization parameter.
-      max_iterations: int - maximum iterations for the Sinkhorn solver.
       p: float - power for the cost (default is 1, but cost is computed as squared Euclidean).
-
+    
     Returns:
-      Average transport cost over the mini-batches.
+      transport cost over the mini-batches.
     """
     
     n = X.shape[0]
@@ -124,7 +121,7 @@ def minibatch_sinkhorn_ot_without_replacement(X, Y, batch_size, p=1):
         ys = jnp.array(Y[idx_tgt])
         
         # Use the precompiled Sinkhorn function.
-        batch_cost = float(sinkhorn_batch(xs, ys))
+        batch_cost = float(sinkhorn_batch(xs, ys), p = p)
         total_cost += batch_cost
 
     # Return the average cost across batches.
