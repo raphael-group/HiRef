@@ -121,7 +121,7 @@ def minibatch_sinkhorn_ot_without_replacement(X, Y, batch_size, p=1):
         ys = jnp.array(Y[idx_tgt])
         
         # Use the precompiled Sinkhorn function.
-        batch_cost = float(sinkhorn_batch(xs, ys), p = p)
+        batch_cost = float(sinkhorn_batch(xs, ys, p = p))
         total_cost += batch_cost
 
     # Return the average cost across batches.
