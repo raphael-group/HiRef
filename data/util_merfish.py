@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import pandas as pd
+from scipy.spatial.distance import cdist
+from scipy.spatial.distance import euclidean
 from scipy.stats import pearsonr
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -10,6 +12,13 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
+
+from tqdm import tqdm
+import jax
+import jax.numpy as jnp
+from ott.geometry.geometry import Geometry
+from ott.problems.linear import linear_problem
+from ott.solvers.linear import sinkhorn
 
 
 
@@ -445,3 +454,385 @@ def spatial_avg(X_df, S, gene, num_bins_x=100, num_bins_y=100):
     # 4) For a single gene, e.g. "Grm4", you can see its smoothed version:
     smoothed_gene = smoothed_counts[gene]
     return smoothed_gene
+
+
+###
+# computing cost
+###
+
+def compute_transport_cost(S1, S2, transport_plan):
+    """
+    Compute the transport cost with vectorized operations while using linear space.
+    
+    Parameters:
+    -----------
+    S1 : numpy.ndarray
+        Source distribution points of shape (n1, d)
+    S2 : numpy.ndarray
+        Target distribution points of shape (n2, d)
+    transport_plan : numpy.ndarray
+        An array of shape (n, 2) containing index pairs
+    
+    Returns:
+    --------
+    float
+        The total transport cost
+    """
+    # Extract indices from transport plan
+    indices = transport_plan.astype(int)
+    i_indices = indices[:, 0]
+    j_indices = indices[:, 1]
+    
+    # Extract the relevant points from S1 and S2
+    S1_selected = S1[i_indices]
+    S2_selected = S2[j_indices]
+    
+    # Compute Euclidean distances
+    distances = np.sqrt(np.sum((S1_selected - S2_selected)**2, axis=1))
+    
+    # Sum all distances
+    total_cost = np.sum(distances)
+    
+    return total_cost
+
+
+def compute_transport_cost_from_plan(S1, S2, plan):
+    """
+    Compute transport cost from a transport plan matrix without instantiating
+    the full cost matrix.
+    
+    Parameters:
+    -----------
+    S1 : numpy.ndarray
+        Source distribution points of shape (n, d)
+    S2 : numpy.ndarray
+        Target distribution points of shape (n, d)
+    plan : numpy.ndarray
+        Transport plan matrix of shape (n, n)
+
+    Returns:
+    --------
+    float
+        The total transport cost
+    """
+    # total_cost = 0.0
+    
+    '''
+    # Find non-zero entries in the plan to avoid unnecessary calculations
+    nonzero_indices = np.argwhere(plan > 0)
+    
+    # Compute cost only for non-zero entries in the plan
+    for i, j in nonzero_indices:
+        # Calculate distance
+        dist = np.sqrt(np.sum((S1[i] - S2[j])**2)) ** p
+        
+        # Add weighted cost
+        total_cost += dist * plan[i, j]
+    '''
+    C = cdist(S1, S2)
+
+    cost = np.sum(C * plan)
+        
+    return cost
+
+
+def compute_transport_cost_from_factored_plan_jax(S1, S2, Q, R, g):
+    """
+    JAX-accelerated computation of transport cost from factored plan.
+    
+    Parameters:
+    -----------
+    S1 : jax.numpy.ndarray
+        Source distribution points of shape (n, d)
+    S2 : jax.numpy.ndarray
+        Target distribution points of shape (m, d)
+    Q : jax.numpy.ndarray
+        Matrix of shape (n, r)
+    R : jax.numpy.ndarray
+        Matrix of shape (m, r)
+    g : jax.numpy.ndarray
+        Vector of length r
+    
+    Returns:
+    --------
+    float
+        The total transport cost
+    """
+    # Create a function to compute individual cost contributions
+    @jax.jit
+    def compute_cost_for_row(i, total):
+        # Get the i-th row of Q and scale it by 1/g
+        q_i_scaled = Q[i] * (1.0 / g)
+        
+        # Calculate costs for all j's at once to maximize parallelism
+        dists = jnp.sqrt(jnp.sum((S1[i, None, :] - S2) ** 2, axis=1))
+        plan_vals = jnp.dot(q_i_scaled, R.T)
+        row_cost = jnp.sum(dists * plan_vals)
+        
+        return total + row_cost
+    
+    # Use JAX's scan operation to loop through rows efficiently
+    total_cost = jax.lax.fori_loop(0, S1.shape[0], compute_cost_for_row, 0.0)
+    
+    return total_cost
+
+
+def efficient_normalized_cdist(S1, S2, device='cuda', dtype=torch.float32, p=2, batch_size=1000):
+    """
+    Efficiently compute normalized pairwise distances between two sets of points
+    without instantiating the full distance matrix at once.
+    
+    Args:
+        S1: First set of points
+        S2: Second set of points
+        device: Computation device ('cuda' or 'cpu')
+        dtype: Data type for computation
+        p: The p-norm to use for distance computation
+        batch_size: Size of batches to use for computation
+        
+    Returns:
+        Normalized pairwise distance matrix
+    """
+    import torch
+    
+    S1_ = torch.tensor(S1, device=device, dtype=dtype)
+    S2_ = torch.tensor(S2, device=device, dtype=dtype)
+    
+    n1 = S1_.shape[0]
+    n2 = S2_.shape[0]
+    
+    # First pass: find max distance without storing full matrix
+    max_dist = 0.0
+    
+    for i in range(0, n1, batch_size):
+        end_i = min(i + batch_size, n1)
+        S1_batch = S1_[i:end_i]
+        
+        for j in range(0, n2, batch_size):
+            end_j = min(j + batch_size, n2)
+            S2_batch = S2_[j:end_j]
+            
+            # Compute batch of distances
+            C_batch = torch.cdist(S1_batch, S2_batch, p=p)
+            
+            # Update max distance
+            batch_max = torch.max(C_batch)
+            max_dist = max(max_dist, batch_max.item())
+    
+    # Second pass: create and fill normalized distance matrix
+    C_normalized = torch.zeros((n1, n2), device=device, dtype=dtype)
+    
+    for i in range(0, n1, batch_size):
+        end_i = min(i + batch_size, n1)
+        S1_batch = S1_[i:end_i]
+        
+        for j in range(0, n2, batch_size):
+            end_j = min(j + batch_size, n2)
+            S2_batch = S2_[j:end_j]
+            
+            # Compute batch of distances and normalize
+            C_batch = torch.cdist(S1_batch, S2_batch, p=p)
+            C_normalized[i:end_i, j:end_j] = C_batch / max_dist
+    
+    return C_normalized
+    
+    # Now compute normalized distances in batches
+    def get_normalized_distances(i, j, end_i, end_j):
+        S1_batch = S1_[i:end_i]
+        S2_batch = S2_[j:end_j]
+        C_batch = torch.cdist(S1_batch, S2_batch, p=p)
+        return C_batch / max_dist
+    
+    # Example of using the function to compute a specific batch
+    # (You can integrate this into your workflow as needed)
+    # normalized_batch = get_normalized_distances(0, 0, batch_size, batch_size)
+    
+    return get_normalized_distances, max_dist
+
+
+def compute_transport_cost_from_factored_plan_torch(S1, S2, Q, R, g, chunk_size=1000, device=None):
+    """
+    Memory-efficient PyTorch implementation of transport cost calculation
+    from factored plan representation.
+    
+    Parameters:
+    -----------
+    S1 : torch.Tensor
+        Source distribution points of shape (n, d)
+    S2 : torch.Tensor
+        Target distribution points of shape (m, d)
+    Q : torch.Tensor
+        Matrix of shape (n, r)
+    R : torch.Tensor
+        Matrix of shape (m, r)
+    g : torch.Tensor
+        Vector of length r
+    chunk_size : int, optional
+        Size of chunks to process at once. Default is 1000.
+    device : torch.device, optional
+        Device to run computation on. Default is None (uses current device).
+    
+    Returns:
+    --------
+    float
+        The total transport cost
+    """
+    # Make sure everything is on the same device
+    if device is not None:
+        S1 = S1.to(device)
+        S2 = S2.to(device)
+        Q = Q.to(device)
+        R = R.to(device)
+        g = g.to(device)
+    
+    n = S1.shape[0]
+    m = S2.shape[0]
+    
+    # Precompute 1/g
+    g_inv = 1.0 / g
+    
+    total_cost = torch.tensor(0.0, device=S1.device)
+    
+    # Process in chunks to minimize memory usage
+    for i in range(0, n, chunk_size):
+        # Clear CUDA cache if using GPU
+        if device is not None and device.type == 'cuda':
+            torch.cuda.empty_cache()
+            
+        i_end = min(i + chunk_size, n)
+        S1_chunk = S1[i:i_end]
+        Q_chunk = Q[i:i_end]
+        
+        # Scale Q by 1/g
+        Q_scaled_chunk = Q_chunk * g_inv.unsqueeze(0)
+        
+        # Process S2 in chunks as well for very large problems
+        for j in range(0, m, chunk_size):
+            j_end = min(j + chunk_size, m)
+            S2_chunk = S2[j:j_end]
+            R_chunk = R[j:j_end]
+            
+            # Compute pairwise distances efficiently using broadcasting
+            # Reshape for broadcasting: (chunk_size, 1, d) - (1, chunk_size, d)
+            diff = S1_chunk.unsqueeze(1) - S2_chunk.unsqueeze(0)
+            dist = torch.sqrt(torch.sum(diff**2, dim=2))
+            
+            # Compute plan values: (chunk_size, r) @ (r, chunk_size) -> (chunk_size, chunk_size)
+            plan_vals = torch.mm(Q_scaled_chunk, R_chunk.t())
+            
+            # Multiply distances by plan values and sum
+            chunk_cost = torch.sum(dist * plan_vals)
+            total_cost += chunk_cost
+            
+            # Free memory
+            del diff, dist, plan_vals
+            if device is not None and device.type == 'cuda':
+                torch.cuda.empty_cache()
+    
+    return total_cost.item()
+
+###
+# minibatch, with plan return
+###
+
+
+@jax.jit
+def sinkhorn_batch(xs, ys, 
+                   x0s, y0s,
+                   x1s, y1s,
+                   x2s, y2s,
+                   x3s, y3s,
+                   x4s, y4s,
+                   p=1):
+    # Pre-compile a jitted instance
+    cost_mat = jnp.linalg.norm(xs[:, None, :] - ys[None, :, :], axis=-1) ** p
+
+    cost_mat_0 = x0s[:, None] * y0s[None, :]
+    cost_mat_1 = x1s[:, None] * y1s[None, :]
+    cost_mat_2 = x2s[:, None] * y2s[None, :]
+    cost_mat_3 = x3s[:, None] * y3s[None, :]
+    cost_mat_4 = x4s[:, None] * y4s[None, :]
+
+    geom = Geometry(cost_mat)
+    ot_problem = linear_problem.LinearProblem(geom)
+    solver = sinkhorn.Sinkhorn()
+    ot_solution = solver(ot_problem)
+    gamma = ot_solution.matrix
+
+    batch_cost = jnp.sum(cost_mat * gamma)
+
+    batch_cost_0 = jnp.sum(cost_mat_0 * gamma)
+    batch_cost_1 = jnp.sum(cost_mat_1 * gamma)
+    batch_cost_2 = jnp.sum(cost_mat_2 * gamma)
+    batch_cost_3 = jnp.sum(cost_mat_3 * gamma)
+    batch_cost_4 = jnp.sum(cost_mat_4 * gamma)
+
+    return batch_cost, batch_cost_0, batch_cost_1, batch_cost_2, batch_cost_3, batch_cost_4
+
+
+def minibatch_sinkhorn(X, Y, X0, Y0, X1, Y1, X2, Y2, X3, Y3, X4, Y4, batch_size, p=1):
+    """
+    Compute mini-batch OT using entropic regularization (Sinkhorn via ott-jax) without replacement.
+    Implicit coupling corresponds to definition 6 of
+    
+    Parameters:
+    -----------
+    X: np.array, shape (n, d) - source samples.
+    Y: np.array, shape (n, d) - target samples.
+    batch_size: int - number of samples in each mini-batch.
+    p: float - power for the cost (default is 1, but cost is computed as squared Euclidean).
+    
+    Returns:
+    --------
+    tuple: (transport cost over the mini-batches, full transport plan)
+    """
+    n = X.shape[0]
+    assert X.shape[0] == Y.shape[0], "X and Y must have the same number of points."
+    batch_size = min(n, batch_size)
+    
+    # Create a random permutation for batching without replacement.
+    perm = np.random.permutation(n)
+    batches = [(perm[i:i+batch_size], perm[i:i+batch_size])
+              for i in range(0, n, batch_size)]
+    
+    total_cost = 0.0
+    total_cost_0 = 0.0
+    total_cost_1 = 0.0
+    total_cost_2 = 0.0
+    total_cost_3 = 0.0
+    total_cost_4 = 0.0
+
+    num_batches = len(batches)
+    
+    for idx_src, idx_tgt in tqdm(batches, desc="Mini-batch Sinkhorn"):
+        # Convert the mini-batch data to jax.numpy arrays.
+        xs = jnp.array(X[idx_src])
+        ys = jnp.array(Y[idx_tgt])
+        x0s = jnp.array(X0[idx_src])
+        y0s = jnp.array(Y0[idx_tgt])
+        x1s = jnp.array(X1[idx_src])
+        y1s = jnp.array(Y1[idx_tgt])
+        x2s = jnp.array(X2[idx_src])
+        y2s = jnp.array(Y2[idx_tgt])
+        x3s = jnp.array(X3[idx_src])
+        y3s = jnp.array(Y3[idx_tgt])
+        x4s = jnp.array(X4[idx_src])
+        y4s = jnp.array(Y4[idx_tgt])
+        
+        # Use the precompiled Sinkhorn function.
+        batch_cost, batch_cost_0, batch_cost_1, batch_cost_2, batch_cost_3, batch_cost_4 = sinkhorn_batch(xs, ys,
+                                                                                                          x0s, y0s,
+                                                                                                          x1s, y1s,
+                                                                                                          x2s, y2s,
+                                                                                                          x3s, y3s,
+                                                                                                          x4s, y4s,
+                                                                                                          p=p)
+        total_cost += float(batch_cost)
+        total_cost_0 += float(batch_cost_0)
+        total_cost_1 += float(batch_cost_1)
+        total_cost_2 += float(batch_cost_2)
+        total_cost_3 += float(batch_cost_3)
+        total_cost_4 += float(batch_cost_4)
+        
+    # Return the average cost across batches and the full transport plan.
+    return total_cost / num_batches, total_cost_0, total_cost_1, total_cost_2, total_cost_3, total_cost_4
