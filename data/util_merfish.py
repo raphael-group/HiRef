@@ -19,6 +19,8 @@ import jax.numpy as jnp
 from ott.geometry.geometry import Geometry
 from ott.problems.linear import linear_problem
 from ott.solvers.linear import sinkhorn
+from jax.scipy import spatial
+
 
 
 
@@ -538,43 +540,79 @@ def compute_transport_cost_from_plan(S1, S2, plan):
 
 def compute_transport_cost_from_factored_plan_jax(S1, S2, Q, R, g):
     """
-    JAX-accelerated computation of transport cost from factored plan.
-    
-    Parameters:
-    -----------
-    S1 : jax.numpy.ndarray
-        Source distribution points of shape (n, d)
-    S2 : jax.numpy.ndarray
-        Target distribution points of shape (m, d)
-    Q : jax.numpy.ndarray
-        Matrix of shape (n, r)
-    R : jax.numpy.ndarray
-        Matrix of shape (m, r)
-    g : jax.numpy.ndarray
-        Vector of length r
-    
-    Returns:
-    --------
-    float
-        The total transport cost
+    JAX implementation of transport cost from Sinkhorn-LR factored plan.
+    Uses pure JAX numpy operations for distance computation.
     """
-    # Create a function to compute individual cost contributions
+    
+    # Precompute g_inv (shape: [r])
+    g_inv = 1.0 / g
+    
     @jax.jit
     def compute_cost_for_row(i, total):
-        # Get the i-th row of Q and scale it by 1/g
-        q_i_scaled = Q[i] * (1.0 / g)
+        # Get the i-th row of Q (shape: [r])
+        q_i = Q[i]
         
-        # Calculate costs for all j's at once to maximize parallelism
-        dists = jnp.sqrt(jnp.sum((S1[i, None, :] - S2) ** 2, axis=1))
+        # Calculate Euclidean distances using pure JAX
+        # Vectorized computation of distances from S1[i] to all points in S2
+        diff = S1[i, None, :] - S2
+        dists = jnp.sqrt(jnp.sum(diff**2, axis=1))
+        
+        # Scale q_i by g_inv (shape: [r])
+        q_i_scaled = q_i * g_inv
+        
+        # Dot product with R.T to get the plan values (shape: [m])
         plan_vals = jnp.dot(q_i_scaled, R.T)
+        
+        # Multiply distances by plan values and sum (shape: [m])
         row_cost = jnp.sum(dists * plan_vals)
         
         return total + row_cost
     
-    # Use JAX's scan operation to loop through rows efficiently
+    # Sum costs across all rows
     total_cost = jax.lax.fori_loop(0, S1.shape[0], compute_cost_for_row, 0.0)
-    
     return total_cost
+
+
+def convert_jax_to_torch(S1_jax, S2_jax, Q_jax, R_jax, g_jax, device=None):
+    """
+    Safely convert JAX arrays to PyTorch tensors.
+    
+    Parameters:
+    -----------
+    S1_jax, S2_jax, Q_jax, R_jax, g_jax : jax.numpy.ndarray
+        The JAX arrays to convert
+    device : torch.device, optional
+        The PyTorch device to place tensors on
+        
+    Returns:
+    --------
+    tuple of torch.Tensor
+        S1, S2, Q, R, g as PyTorch tensors
+    """
+    # First convert JAX arrays to NumPy arrays
+    # This step is important as direct conversion from JAX to PyTorch can be problematic
+    S1_np = np.array(S1_jax)
+    S2_np = np.array(S2_jax)
+    Q_np = np.array(Q_jax)
+    R_np = np.array(R_jax)
+    g_np = np.array(g_jax)
+    
+    # Then convert NumPy arrays to PyTorch tensors
+    S1 = torch.from_numpy(S1_np).float()
+    S2 = torch.from_numpy(S2_np).float()
+    Q = torch.from_numpy(Q_np).float()
+    R = torch.from_numpy(R_np).float()
+    g = torch.from_numpy(g_np).float()
+    
+    # Move to specified device if provided
+    if device is not None:
+        S1 = S1.to(device)
+        S2 = S2.to(device)
+        Q = Q.to(device)
+        R = R.to(device)
+        g = g.to(device)
+    
+    return S1, S2, Q, R, g
 
 
 def efficient_normalized_cdist(S1, S2, device='cuda', dtype=torch.float32, p=2, batch_size=1000):
@@ -593,7 +631,6 @@ def efficient_normalized_cdist(S1, S2, device='cuda', dtype=torch.float32, p=2, 
     Returns:
         Normalized pairwise distance matrix
     """
-    import torch
     
     S1_ = torch.tensor(S1, device=device, dtype=dtype)
     S2_ = torch.tensor(S2, device=device, dtype=dtype)
