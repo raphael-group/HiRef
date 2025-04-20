@@ -243,7 +243,9 @@ class HierarchicalRefinementOT:
                     plt.show()
                 
                 # Next level cluster capacity
-                capacity = int( self.N / torch.prod( torch.Tensor(self.rank_schedule[0:i+1]) ) )
+                capacity = int(self.N) / int(torch.prod(torch.Tensor(self.rank_schedule[0:i+1])))
+                capacity = int(capacity)
+                
                 idx_seenX, idx_seenY = torch.arange(Q.shape[0], device=self.device), \
                                                     torch.arange(R.shape[0], device=self.device)
                 
@@ -301,7 +303,6 @@ class HierarchicalRefinementOT:
         """
         
         _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
-        print(f'x0 shape: {_x0.shape}, x1 shape: {_x1.shape}, rankD: {rankD}')
         
         if rankD < _x0.shape[0]:
             
