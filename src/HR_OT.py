@@ -77,17 +77,18 @@ class HierarchicalRefinementOT:
         self.Monge_clusters = None
         # This is a dummy line -- this init doesn't compute C or its factorization
         self.sq_Euclidean = False
-
+        
         # Setting parameters to use with the FRLC solver
         default_solver_params = {
-            'gamma' : 30,
-            'max_iter' : 60,
-            'min_iter' : 25,
-            'max_inneriters_balanced' : 100,
-            'max_inneriters_relaxed' : 40,
+            'gamma' : 90,
+            'max_iter' : 30,
+            'min_iter' : 15,
+            'max_inneriters_balanced' : 300,
+            'max_inneriters_relaxed' : 300,
             'printCost' : False,
             'tau_in' : 100000
         }
+        
         if solver_params is not None:
             default_solver_params.update(solver_params)
         self.solver_params = default_solver_params
@@ -154,11 +155,11 @@ class HierarchicalRefinementOT:
 
         # Setting parameters to use with the FRLC solver
         default_solver_params = {
-            'gamma' : 30,
-            'max_iter' : 60,
-            'min_iter' : 25,
-            'max_inneriters_balanced' : 100,
-            'max_inneriters_relaxed' : 40,
+            'gamma' : 90,
+            'max_iter' : 30,
+            'min_iter' : 15,
+            'max_inneriters_balanced' : 300,
+            'max_inneriters_relaxed' : 300,
             'printCost' : False,
             'tau_in' : 100000
         }
@@ -320,7 +321,8 @@ class HierarchicalRefinementOT:
                                        max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
                                        max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                        diagonalize_return = True,
-                                       printCost = False, tau_in = self.solver_params['tau_in'],
+                                       printCost = self.solver_params['printCost'],
+                                        tau_in = self.solver_params['tau_in'],
                                         dtype = _x0.dtype)
         
         else:
@@ -342,7 +344,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
                                    max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
-                                   printCost=False, tau_in = self.solver_params['tau_in'],
+                                   printCost=self.solver_params['printCost'], tau_in = self.solver_params['tau_in'],
                                        dtype = C_XY.dtype)
             
         return Q, R
@@ -366,7 +368,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_balanced = self.solver_params['max_inneriters_balanced'],
                                    max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
-                                   printCost=False, tau_in = self.solver_params['tau_in'],
+                                   printCost=self.solver_params['printCost'], tau_in = self.solver_params['tau_in'],
                                        dtype = C_XY.dtype)
         return Q, R
     
