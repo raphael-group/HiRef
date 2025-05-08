@@ -59,3 +59,8 @@ print(f"Refinement Cost: {cost_hr_ot.item()}")
 ## Contact
 
 For questions, discussions, or collaboration inquiries, feel free to reach out at [ph3641@princeton.edu](mailto:ph3641@princeton.edu) or [jg7090@princeton.edu](mailto:jg7090@princeton.edu).
+
+## Reproducibility
+
+While the default hyperparameter settings for HiRef have changed, the exact experiments and hyperparameter settings used are available on OpenReview. At the time of benchmarking, the default epsilon of Sinkhorn in ott-jax was 0.05, which has since been modified as well.
+
