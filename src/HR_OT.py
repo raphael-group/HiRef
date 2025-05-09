@@ -205,16 +205,19 @@ class HierarchicalRefinementOT:
         for i, rank_level in enumerate(self.rank_schedule):
             # Iterate over ranks in the scheduler
             F_tp1 = []
-
+            
+            print(f'\n--- Rank Level {i + 1} of {len(self.rank_schedule)} ---')
+            
             if i == len(self.rank_schedule)-1:
                 fin_iters = int(self.N / rank_level)
-                print(f'Last level, rank chunk-size {rank_level} with {fin_iters} iterations to completion.')
+                print(f'>>> Final Rank Level | Rank Chunk Size: {rank_level} | Remaining Iterations: {fin_iters}')
                 j = 0
             
             for (idxX, idxY) in F_t:
 
                 if i == len(self.rank_schedule)-1:
-                    print(f'{j}/{fin_iters} of final-level iterations to completion')
+                    
+                    print(f'    Base-Level Iteration {j + 1}/{fin_iters} ')
                     j += 1
                 
                 if len(idxX) <=self.base_rank or len(idxY) <= self.base_rank:
