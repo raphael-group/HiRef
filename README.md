@@ -71,8 +71,8 @@ import HR_OT
 import LR_mini
 
 solver_params = {
-            'max_iter' : 15,
-            'min_iter' : 10,
+            'max_iter' : 45,
+            'min_iter' : 30,
             'max_inneriters_balanced' : 60
         }
 hrot_lr = HR_OT.HierarchicalRefinementOT.init_from_point_clouds(
