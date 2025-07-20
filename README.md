@@ -2,7 +2,12 @@
 
 This is the repository for the paper **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://arxiv.org/pdf/2503.03025)** which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
 
-In the section below, we detail the usage of Hierarchical Refinement which complements the simple example notebooks `refinement_demo_nb.ipynb` and `refinement_demo_nb_fast.ipynb`. We additionally detail how to run Hierarchical Refinement with acceleration, which we recommend using and intend to set as a default in the future.
+In the section below, we detail the usage of Hierarchical Refinement which complements the simple example notebooks:
+```markdown
+- [refinement_demo_nb.ipynb](notebooks/refinement_demo_nb.ipynb)
+- [refinement_demo_nb_fast.ipynb](notebooks/refinement_demo_nb_fast.ipynb)
+```
+We additionally detail how to run Hierarchical Refinement with acceleration, which we recommend using and intend to set as a default in the future.
 
 <img src="images/fig1-2.png" alt="Hierarchical Refinement Schematic" width="50%">
 
@@ -55,7 +60,7 @@ Gamma_hrot = hrot.run(return_as_coupling=False)
 To print the Optimal Transport (OT) cost, simply call:
 ```python
 cost_hrot = hrot.compute_OT_cost()
-print(f"Refinement Cost: {cost_hr_ot.item()}")
+print(f"Refinement Cost: {cost_hrot.item()}")
 ```
 
 ## Acceleration
