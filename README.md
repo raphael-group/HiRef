@@ -57,7 +57,7 @@ print(f"Refinement Cost: {cost_hr_ot.item()}")
 ```
 
 ## Acceleration
-One may accelerate Hierarchical Refinement in a number of ways. First, one may edit the solver parameters to place a ceiling on the number of iterations run, if speed is a more important factor than solution optimality by lowering the `max_iter` and `max_inneriters` parameters. Moreover, one may use a more lightweight low-rank OT solver (`LR_mini.LROT_LR_opt` for low-rank cost matrix and `LR_mini.LROT_opt` for full cost matrix). This can be done by simply passing these different solvers as:
+One may accelerate Hierarchical Refinement in a number of ways. First, one may edit the solver parameters to place a ceiling on the number of iterations run, e.g. if speed is a more important factor than solution optimality. This can be done by lowering the `max_iter` and `max_inneriters` parameters from their default values. In addition, one may use a more lightweight low-rank OT solver (`src/LR_mini.LROT_LR_opt` for low-rank cost matrix and `src/LR_mini.LROT_opt` for full cost matrix) by simply passing the updated solvers to the initialization. All of these changes can be implemented with the following changes to the code above:
 
 ```python
 import HR_OT
