@@ -1,6 +1,7 @@
 # Solver imports
 import FRLC
 from FRLC import FRLC_opt, FRLC_LR_opt
+from LR_mini import LROT_opt, LROT_LR_opt
 import util
 # Other misc imports
 import torch
@@ -102,6 +103,7 @@ class HierarchicalRefinementOT:
                             rank_schedule: List[int],
                             distance_rank_schedule: Union[List[int], None] = None,
                             solver: Callable = FRLC_LR_opt,
+                            solver_full: Callable = FRLC_opt,
                             solver_params: Union[Dict[str, Any] , None] = None,
                             device: str = 'cpu',
                             base_rank: int = 1,
@@ -109,7 +111,7 @@ class HierarchicalRefinementOT:
                             plot_clusterings: bool = False,
                             parallel: bool = False,
                             num_processes: Union[int, None] = None,
-                              sq_Euclidean = False):
+                            sq_Euclidean = False):
         r"""
         Constructor for initializing from point clouds.
         
@@ -119,6 +121,9 @@ class HierarchicalRefinementOT:
             The point-cloud of shape N for measure \mu
         Y: torch.tensor
             Point cloud of shape N for measure \nu
+        solver_full : callable
+            A low-rank OT solver that takes a full cost submatrix (not low-rank cost) 
+            and returns Q, R, diagG, errs.
         distance_rank_schedule: List[int]
             A separate rank-schedule for the low-rank distance matrix being factorized.
         sq_Euclidean : bool
@@ -140,6 +145,7 @@ class HierarchicalRefinementOT:
             obj.distance_rank_schedule = distance_rank_schedule
         
         obj.solver = solver
+        obj.solver_full = solver_full
         obj.device = device
         obj.base_rank = base_rank
         obj.clustering_type = clustering_type
@@ -152,7 +158,13 @@ class HierarchicalRefinementOT:
         obj.C = None
         obj.Monge_clusters = None
         obj.sq_Euclidean = sq_Euclidean
-
+        
+        if sq_Euclidean:
+            # compute once on the full point clouds
+            obj.C_factors_global = compute_lr_sqeuclidean_matrix(
+                obj.X, obj.Y, rescale_cost=True
+            )
+        
         # Setting parameters to use with the FRLC solver
         default_solver_params = {
             'gamma' : 90,
@@ -269,7 +281,7 @@ class HierarchicalRefinementOT:
                         idx_seenX = idx_seenX[~torch.isin(idx_seenX, idx_seenX[topk_indices_X])]
                         idx_seenY = idx_seenY[~torch.isin(idx_seenY, idx_seenY[topk_indices_Y])]
                 
-                elif clustering_type == 'hard':
+                elif self.clustering_type == 'hard':
                     # If using a solver which returns "hard" clusterings, can exactly take argmax.
                     
                     zX = torch.argmax(Q, axis=1) # X-assignments
@@ -279,7 +291,7 @@ class HierarchicalRefinementOT:
                         
                         idxX_z = idxX[zX == z]
                         idxY_z = idxY[zY == z]
-    
+                        
                         assert len(idxX_z) == len(idxY_z) == capacity, \
                                             "Assertion failed! Not a hard-clustering function, or point sets of unequal size!"
                         
@@ -306,16 +318,15 @@ class HierarchicalRefinementOT:
         Solve problem for low-rank coupling under a low-rank factorization of distance matrix.
         """
         
-        _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
-        
-        if rankD < _x0.shape[0]:
+        if rankD < idxX.numel():
             
-            C_factors, A_factors, B_factors = self.get_dist_mats(_x0, _x1, 
-                                                                 rankD, eps, 
-                                                                 self.sq_Euclidean )
+            C_factors, A_factors, B_factors = self.get_dist_mats(
+                            idxX, idxY, rankD, eps, self.sq_Euclidean 
+                                    )
             
             # Solve a low-rank OT sub-problem with black-box solver
-            Q, R, diagG, errs = self.solver(C_factors, A_factors, B_factors,
+            Q, R, _, _ = self.solver(
+                                    C_factors, A_factors, B_factors,
                                        gamma = self.solver_params['gamma'],
                                        r = rank_level,
                                        max_iter = self.solver_params['max_iter'],
@@ -326,19 +337,21 @@ class HierarchicalRefinementOT:
                                        diagonalize_return = True,
                                        printCost = self.solver_params['printCost'],
                                         tau_in = self.solver_params['tau_in'],
-                                        dtype = _x0.dtype)
-        
+                                        dtype = self.X.dtype
+                                    )
+            return Q, R
+            
         else:
             
-            # Final base instance -- cost within-cluster costs explicitly
-            if self.sq_Euclidean:
-                C_XY = torch.cdist(_x0, _x1)**2
-                
-            else:
-                # normal Euclidean distance otherwise
-                C_XY = torch.cdist(_x0, _x1)
+            _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
             
-            Q, R, diagG, errs = FRLC_opt(C_XY,
+            # Final base instance -- can compute within-cluster costs explicitly
+            # (explicit dense cost for tiny size cluster)
+            
+            C_XY = torch.cdist(_x0, _x1, p=2)**2 if self.sq_Euclidean else torch.cdist(_x0, _x1, p=2)
+            
+            # LR Solver for full cost
+            Q, R, _, _ = self.solver_full(C_XY,
                                    gamma = self.solver_params['gamma'],
                                    r = rank_level,
                                    max_iter = self.solver_params['max_iter'],
@@ -348,9 +361,9 @@ class HierarchicalRefinementOT:
                                    max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
                                    printCost=self.solver_params['printCost'], tau_in = self.solver_params['tau_in'],
-                                       dtype = C_XY.dtype)
+                                   dtype = C_XY.dtype)
             
-        return Q, R
+            return Q, R
         
     def _solve_prob(self, idxX, idxY, rank_level):
         """
@@ -372,7 +385,7 @@ class HierarchicalRefinementOT:
                                    max_inneriters_relaxed = self.solver_params['max_inneriters_relaxed'],
                                    diagonalize_return=True,
                                    printCost=self.solver_params['printCost'], tau_in = self.solver_params['tau_in'],
-                                       dtype = C_XY.dtype)
+                                    dtype = C_XY.dtype)
         return Q, R
     
     def _compute_coupling_from_Ft(self):
@@ -381,7 +394,9 @@ class HierarchicalRefinementOT:
         """
         size = (self.N, self.N)
         P = torch.zeros(size)
+        
         # Fill sparse coupling with entries
+        
         for pair in self.Monge_clusters:
             idx1, idx2 = pair
             P[idx1, idx2] = 1
@@ -396,6 +411,7 @@ class HierarchicalRefinementOT:
         cost = 0
         for clus in self.Monge_clusters:
             idx1, idx2 = clus
+            
             if self.C is not None:
                 # If C saved, index into general cost directly
                 cost += self.C[idx1, idx2]
@@ -407,23 +423,33 @@ class HierarchicalRefinementOT:
                 else:
                     # normal Euclidean cost
                     cost += torch.norm(self.X[idx1,:] - self.Y[idx2,:])
+                    
         # Appropriately normalize the cost
         cost = cost / self.N
         return cost
-
     
-    def get_dist_mats(self, _x0, _x1, rankD, eps , sq_Euclidean ):
+    def get_dist_mats(self, idxX, idxY, rankD, eps , sq_Euclidean ):
         
         # Wasserstein-only, setting A and B factors to be NoneType
         A_factors = None
         B_factors = None
         
         if sq_Euclidean:
-            # Sq Euclidean
-            C_factors = compute_lr_sqeuclidean_matrix(_x0, _x1, True)
+            # Sq-Euclidean dist
+            
+            M1_global, M2T_global = self.C_factors_global
+            C_factors = ( M1_global[idxX], 
+                         M2T_global[:, idxY] )
+            
+            # alternatively (slower): 
+            # _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
+            # C_factors = compute_lr_sqeuclidean_matrix(_x0, _x1, True)
+        
         else:
             # Standard Euclidean dist
-            C_factors = self.ret_normalized_cost(_x0, _x1, rankD, eps)
+            _x0, _x1 = torch.index_select(self.X, 0, idxX), torch.index_select(self.Y, 0, idxY)
+            C_factors = self.ret_normalized_cost(_x0, _x1, 
+                                                 rankD, eps)
         
         return C_factors, A_factors, B_factors
     
