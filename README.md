@@ -56,6 +56,29 @@ cost_hrot = hrot.compute_OT_cost()
 print(f"Refinement Cost: {cost_hr_ot.item()}")
 ```
 
+## Acceleration
+One may accelerate Hierarchical Refinement in a number of ways. First, one may edit the solver parameters to place a ceiling on the number of iterations run, if speed is a more important factor than solution optimality by lowering the `max_iter` and `max_inneriters` parameters. Moreover, one may use a more lightweight low-rank OT solver (`LR_mini.LROT_LR_opt` for low-rank cost matrix and `LR_mini.LROT_opt` for full cost matrix). This can be done by simply passing these different solvers as:
+
+```python
+import HR_OT
+import LR_mini
+
+solver_params = {
+            'max_iter' : 14,
+            'min_iter' : 10,
+            'max_inneriters_balanced' : 60
+        }
+hrot_lr = HR_OT.HierarchicalRefinementOT.init_from_point_clouds(
+                                                                X, Y,
+                                                                rank_schedule, base_rank=1,
+                                                                device=device,
+                                                                solver_params=solver_params,
+                                                                solver=LR_mini.LROT_LR_opt,
+                                                                solver_full=LR_mini.LROT_opt
+                                                            )
+```
+An implementation demonstrating this acceleration for squared Euclidean cost can be found in `refinement_demo_nb_fast.ipynb` for reference, with an example alignment of 2 x 200k points.
+
 ## Contact
 
 For questions, discussions, or collaboration inquiries, feel free to reach out at [ph3641@princeton.edu](mailto:ph3641@princeton.edu) or [jg7090@princeton.edu](mailto:jg7090@princeton.edu).
