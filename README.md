@@ -100,12 +100,12 @@ If you found Hierarchical Refinement to be useful in your work, feel free to cit
 
 ```bibtex
 @inproceedings{
-halmos2025hierarchical,
-title={Hierarchical Refinement: Optimal Transport to Infinity and Beyond},
-author={Peter Halmos and Julian Gold and Xinhao Liu and Benjamin Raphael},
-booktitle={Forty-second International Conference on Machine Learning},
-year={2025},
-url={https://openreview.net/forum?id=EBNgREMoVD}
+    halmos2025hierarchical,
+    title={Hierarchical Refinement: Optimal Transport to Infinity and Beyond},
+    author={Peter Halmos and Julian Gold and Xinhao Liu and Benjamin Raphael},
+    booktitle={Forty-second International Conference on Machine Learning},
+    year={2025},
+    url={https://openreview.net/forum?id=EBNgREMoVD}
 }
 ```
 
