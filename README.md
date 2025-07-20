@@ -64,7 +64,7 @@ import HR_OT
 import LR_mini
 
 solver_params = {
-            'max_iter' : 14,
+            'max_iter' : 15,
             'min_iter' : 10,
             'max_inneriters_balanced' : 60
         }
