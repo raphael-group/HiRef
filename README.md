@@ -1,6 +1,6 @@
 # Hierarchical Refinement (HiRef)
 
-This is the repository for the paper **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://arxiv.org/pdf/2503.03025)** which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
+This is the repository for **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://openreview.net/forum?id=EBNgREMoVD)** (ICML 2025) which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
 
 In the section below, we detail the usage of Hierarchical Refinement which complements the simple example notebooks:
 ```markdown
@@ -93,4 +93,20 @@ For questions, discussions, or collaboration inquiries, feel free to reach out a
 ## Reproducibility
 
 While the default hyperparameter settings for HiRef have changed, the exact experiments and hyperparameter settings used are available on OpenReview. At the time of benchmarking, the default epsilon of Sinkhorn in ott-jax was 0.05, which has since been modified. Note that low-rank solvers such as LOT and FRLC are non-convex and use randomized initial conditions, so the solution of HiRef may exhibit slight variation between runs.
+
+### Other
+
+If you found Hierarchical Refinement to be useful in your work, feel free to cite the paper:
+```bibtex
+@inproceedings{
+halmos2025hierarchical,
+title={Hierarchical Refinement: Optimal Transport to Infinity and Beyond},
+author={Peter Halmos and Julian Gold and Xinhao Liu and Benjamin Raphael},
+booktitle={Forty-second International Conference on Machine Learning},
+year={2025},
+url={https://openreview.net/forum?id=EBNgREMoVD}
+}
+```
+
+
 
