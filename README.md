@@ -92,7 +92,7 @@ For questions, discussions, or collaboration inquiries, feel free to reach out a
 
 ## Reproducibility
 
-All experiments are available in the folder `HiRef/experiments/`. While the default hyperparameter settings for HiRef have changed, the exact experiments and hyperparameter settings used are available on OpenReview. At the time of benchmarking, the default epsilon of Sinkhorn in ott-jax was 0.05, which has since been modified. Note that low-rank solvers such as LOT and FRLC are non-convex and use randomized initial conditions, so the solution of HiRef may exhibit slight variation between runs.
+All experiments are available in the folder `HiRef/experiments/`. To generate the datasets used for the mouse-embryo experiment, the raw Stereo-Seq mouse embryo slices (E9.5-16.5) may be accessed from the [MOSTA database](https://db.cngb.org/stomics/datasets/STDS0000058/data) and converted to a pre-processed form using the script `HiRef/data/preprocess_embryo.py`. While the default hyperparameter settings for HiRef have changed, the exact experiments and hyperparameter settings used are available on OpenReview. At the time of benchmarking, the default epsilon of Sinkhorn in ott-jax was 0.05, which has since been modified. Note that low-rank solvers such as LOT and FRLC are non-convex and use randomized initial conditions, so the solution of HiRef may exhibit slight variation between runs. 
 
 ## Citation
 
