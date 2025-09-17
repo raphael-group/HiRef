@@ -1,5 +1,10 @@
 # Hierarchical Refinement (HiRef)
 
+**JAX Port available here:**  
+[https://github.com/peterhalmos/HiRef/tree/main](https://github.com/peterhalmos/HiRef/tree/main)
+
+---
+
 This is the repository for **["Hierarchical Refinement: Optimal Transport to Infinity and Beyond,"](https://openreview.net/forum?id=EBNgREMoVD)** (ICML 2025) which scales optimal transport **linearly in space** and **log-linearly in time** by using a hierarchical strategy that constructs multiscale partitions from low-rank optimal transport.
 
 In the section below, we detail the usage of Hierarchical Refinement which complements the simple example notebooks:
