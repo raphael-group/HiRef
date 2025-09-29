@@ -1,6 +1,6 @@
 # Hierarchical Refinement (HiRef)
 
-**High-Performance and minimal JAX Port available here:**  
+**High-Performance and minimal JAX Port available here (recommended):**  
 [https://github.com/peterhalmos/HiRef/tree/main](https://github.com/peterhalmos/HiRef/tree/main)
 
 ---
